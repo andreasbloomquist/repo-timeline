@@ -345,23 +345,20 @@ Write a clear, concise 2-3 sentence summary explaining what this change does in 
   }
 });
 
-// Generate a 2-3 word summary from a title/message
+// Generate a short summary from a title/message
 function generateSummary(text) {
-  // Remove common prefixes
+  // Only strip conventional commit prefixes like "feat:", "fix(scope):"
   let clean = text
     .replace(/^(feat|fix|chore|docs|style|refactor|test|build|ci|perf|revert)(\(.+?\))?:?\s*/i, '')
-    .replace(/^\[.+?\]\s*/, '')
-    .replace(/^(add|update|fix|remove|implement|create|delete|refactor)\s+/i, '');
+    .replace(/^\[.+?\]\s*/, '');
 
-  // Get first few meaningful words
   const words = clean.split(/\s+/).filter(w => w.length > 0);
 
-  if (words.length <= 3) {
-    return words.join(' ').substring(0, 30);
+  if (words.length <= 4) {
+    return words.join(' ');
   }
 
-  // Take first 2-3 words
-  return words.slice(0, 3).join(' ').substring(0, 30);
+  return words.slice(0, 4).join(' ') + '...';
 }
 
 app.listen(PORT, () => {
