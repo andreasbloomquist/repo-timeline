@@ -56,6 +56,18 @@ const ExternalIcon = () => (
   </svg>
 )
 
+const ArrowUpIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 19V5M5 12l7-7 7 7"/>
+  </svg>
+)
+
+const ArrowDownIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 5v14M5 12l7 7 7-7"/>
+  </svg>
+)
+
 // Format date
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr)
@@ -105,6 +117,28 @@ async function fetchTimeline(owner: string, repo: string, branch: string): Promi
 
 async function logout(): Promise<void> {
   await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' })
+}
+
+async function fetchAISummary(event: TimelineEvent): Promise<string> {
+  try {
+    const res = await fetch(`${API_URL}/api/summarize`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: event.type,
+        title: event.summary,
+        description: event.description,
+        additions: event.additions,
+        deletions: event.deletions
+      })
+    })
+    if (!res.ok) return event.description
+    const data = await res.json()
+    return data.summary || event.description
+  } catch {
+    return event.description
+  }
 }
 
 // Components
@@ -197,6 +231,18 @@ function TimelineEventCard({
   onToggle: () => void
 }) {
   const side = index % 2 === 0 ? 'left' : 'right'
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [loadingSummary, setLoadingSummary] = useState(false)
+
+  useEffect(() => {
+    if (isExpanded && !aiSummary && !loadingSummary) {
+      setLoadingSummary(true)
+      fetchAISummary(event).then(summary => {
+        setAiSummary(summary)
+        setLoadingSummary(false)
+      })
+    }
+  }, [isExpanded, event, aiSummary, loadingSummary])
 
   return (
     <motion.div
@@ -224,15 +270,31 @@ function TimelineEventCard({
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             >
               <div className="event-details-inner">
-                <p className="event-description">
-                  {event.description.length > 300
-                    ? event.description.substring(0, 300) + '...'
-                    : event.description}
-                </p>
+                <div className="ai-summary-section">
+                  <span className="ai-summary-label">AI Summary</span>
+                  {loadingSummary ? (
+                    <p className="ai-summary-text loading">Generating summary...</p>
+                  ) : (
+                    <p className="ai-summary-text">{aiSummary}</p>
+                  )}
+                </div>
+
+                <div className="commit-message-section">
+                  <span className="commit-message-label">
+                    {event.type === 'pr' ? 'PR Description' : 'Commit Message'}
+                  </span>
+                  <p className="commit-message-text">
+                    {event.description.length > 500
+                      ? event.description.substring(0, 500) + '...'
+                      : event.description}
+                  </p>
+                </div>
+
                 <div className="event-stats">
                   <span className="stat stat-add">+{event.additions.toLocaleString()}</span>
                   <span className="stat stat-del">-{event.deletions.toLocaleString()}</span>
                 </div>
+
                 <div className="event-author">
                   <img src={event.author.avatar} alt={event.author.name} className="author-avatar" />
                   <span className="author-name">{event.author.name}</span>
@@ -291,6 +353,29 @@ function Timeline({ events, loading }: { events: TimelineEvent[]; loading: boole
           />
         ))}
       </div>
+    </div>
+  )
+}
+
+function NavArrows({ show }: { show: boolean }) {
+  if (!show) return null
+
+  const scrollUp = () => {
+    window.scrollBy({ top: -window.innerHeight * 0.8, behavior: 'smooth' })
+  }
+
+  const scrollDown = () => {
+    window.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="nav-arrows">
+      <button className="nav-arrow" onClick={scrollUp} aria-label="Scroll up">
+        <ArrowUpIcon />
+      </button>
+      <button className="nav-arrow" onClick={scrollDown} aria-label="Scroll down">
+        <ArrowDownIcon />
+      </button>
     </div>
   )
 }
@@ -443,6 +528,8 @@ function App() {
           <LoginScreen />
         )}
       </main>
+
+      <NavArrows show={!!user && events.length > 0 && !loadingTimeline} />
     </div>
   )
 }

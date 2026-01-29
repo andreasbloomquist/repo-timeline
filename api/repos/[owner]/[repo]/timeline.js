@@ -50,6 +50,7 @@ export default async function handler(request) {
   };
 
   const events = [];
+  const prCommitShas = new Set();
 
   try {
     // Fetch merged PRs
@@ -59,8 +60,8 @@ export default async function handler(request) {
     );
     const prs = await prsResponse.json();
 
-    // Process PRs
-    for (const pr of (prs || []).filter(p => p.merged_at).slice(0, 15)) {
+    // Process ALL merged PRs (any line count)
+    for (const pr of (prs || []).filter(p => p.merged_at).slice(0, 20)) {
       try {
         const prDetailResponse = await fetch(
           `https://api.github.com/repos/${owner}/${repo}/pulls/${pr.number}`,
@@ -68,25 +69,39 @@ export default async function handler(request) {
         );
         const prDetail = await prDetailResponse.json();
 
-        const totalChanges = (prDetail.additions || 0) + (prDetail.deletions || 0);
-
-        if (totalChanges >= 100) {
-          events.push({
-            id: `pr-${pr.number}`,
-            type: 'pr',
-            summary: generateSummary(pr.title),
-            description: pr.body || 'No description provided.',
-            date: pr.merged_at,
-            author: {
-              name: pr.user.login,
-              avatar: pr.user.avatar_url
-            },
-            additions: prDetail.additions || 0,
-            deletions: prDetail.deletions || 0,
-            url: pr.html_url,
-            prNumber: pr.number
-          });
+        // Track merge commit SHA
+        if (prDetail.merge_commit_sha) {
+          prCommitShas.add(prDetail.merge_commit_sha);
         }
+
+        // Get PR commits to exclude from direct commits
+        try {
+          const prCommitsResponse = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/pulls/${pr.number}/commits?per_page=100`,
+            { headers }
+          );
+          const prCommits = await prCommitsResponse.json();
+          (prCommits || []).forEach(c => prCommitShas.add(c.sha));
+        } catch (e) {
+          // Continue without PR commits list
+        }
+
+        // Include ALL merged PRs regardless of line count
+        events.push({
+          id: `pr-${pr.number}`,
+          type: 'pr',
+          summary: generateSummary(pr.title),
+          description: pr.body || 'No description provided.',
+          date: pr.merged_at,
+          author: {
+            name: pr.user.login,
+            avatar: pr.user.avatar_url
+          },
+          additions: prDetail.additions || 0,
+          deletions: prDetail.deletions || 0,
+          url: pr.html_url,
+          prNumber: pr.number
+        });
       } catch (e) {
         // Skip PRs we can't fetch
       }
@@ -99,8 +114,18 @@ export default async function handler(request) {
     );
     const commits = await commitsResponse.json();
 
-    // Process commits
-    for (const commit of (commits || []).slice(0, 20)) {
+    // Process only direct commits (not part of PRs) with >100 line changes
+    for (const commit of (commits || []).slice(0, 30)) {
+      // Skip if this commit is part of a PR
+      if (prCommitShas.has(commit.sha)) {
+        continue;
+      }
+
+      // Skip merge commits (multiple parents)
+      if (commit.parents && commit.parents.length > 1) {
+        continue;
+      }
+
       try {
         const commitDetailResponse = await fetch(
           `https://api.github.com/repos/${owner}/${repo}/commits/${commit.sha}`,
@@ -110,28 +135,23 @@ export default async function handler(request) {
 
         const totalChanges = (commitDetail.stats?.additions || 0) + (commitDetail.stats?.deletions || 0);
 
-        if (totalChanges >= 100 && (commitDetail.parents?.length === 1)) {
-          const isPRCommit = events.some(e =>
-            e.type === 'pr' && commit.commit.message.includes(`#${e.prNumber}`)
-          );
-
-          if (!isPRCommit) {
-            events.push({
-              id: `commit-${commit.sha}`,
-              type: 'commit',
-              summary: generateSummary(commit.commit.message.split('\n')[0]),
-              description: commit.commit.message,
-              date: commit.commit.author.date,
-              author: {
-                name: commit.author?.login || commit.commit.author.name,
-                avatar: commit.author?.avatar_url || `https://github.com/identicons/${commit.commit.author.name}.png`
-              },
-              additions: commitDetail.stats?.additions || 0,
-              deletions: commitDetail.stats?.deletions || 0,
-              url: commit.html_url,
-              sha: commit.sha.substring(0, 7)
-            });
-          }
+        // Only include direct commits with >100 line changes
+        if (totalChanges > 100) {
+          events.push({
+            id: `commit-${commit.sha}`,
+            type: 'commit',
+            summary: generateSummary(commit.commit.message.split('\n')[0]),
+            description: commit.commit.message,
+            date: commit.commit.author.date,
+            author: {
+              name: commit.author?.login || commit.commit.author.name,
+              avatar: commit.author?.avatar_url || `https://github.com/identicons/${commit.commit.author.name}.png`
+            },
+            additions: commitDetail.stats?.additions || 0,
+            deletions: commitDetail.stats?.deletions || 0,
+            url: commit.html_url,
+            sha: commit.sha.substring(0, 7)
+          });
         }
       } catch (e) {
         // Skip commits we can't fetch
