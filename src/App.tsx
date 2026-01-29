@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import ReactMarkdown from 'react-markdown'
 import './App.css'
 
 // Use relative URLs - works in both dev (with proxy) and production
 const API_URL = ''
+
+// Analytics
+declare global {
+  interface Window { gtag?: (...args: unknown[]) => void }
+}
+
+function trackEvent(action: string, params?: Record<string, string | number | boolean>) {
+  window.gtag?.('event', action, params)
+}
 
 // Types
 interface TimelineEvent {
@@ -148,8 +158,10 @@ function Header({
   selectedRepo,
   selectedBranch,
   branches,
+  aiEnabled,
   onRepoChange,
   onBranchChange,
+  onToggleAI,
   onLogout
 }: {
   user: User | null
@@ -157,11 +169,14 @@ function Header({
   selectedRepo: Repo | null
   selectedBranch: string
   branches: string[]
+  aiEnabled: boolean
   onRepoChange: (repo: Repo) => void
   onBranchChange: (branch: string) => void
+  onToggleAI: () => void
   onLogout: () => void
 }) {
   const handleLogin = () => {
+    trackEvent('click_login')
     window.location.href = `${API_URL}/api/auth/github`
   }
 
@@ -169,6 +184,14 @@ function Header({
     <header className="header">
       <div className="header-left">
         <span className="logo">Timeline</span>
+        {user && (
+          <div className="ai-toggle" onClick={() => { trackEvent('toggle_ai_summary', { enabled: !aiEnabled }); onToggleAI() }}>
+            <div className={`toggle-track ${aiEnabled ? 'on' : 'off'}`}>
+              <div className="toggle-thumb" />
+            </div>
+            <span className="toggle-label">AI Summary</span>
+          </div>
+        )}
         {user && selectedRepo && (
           <div className="selectors">
             <div className="selector">
@@ -176,7 +199,10 @@ function Header({
                 value={selectedRepo.id}
                 onChange={(e) => {
                   const repo = repos.find(r => r.id === Number(e.target.value))
-                  if (repo) onRepoChange(repo)
+                  if (repo) {
+                    trackEvent('select_repo', { repo_name: repo.fullName })
+                    onRepoChange(repo)
+                  }
                 }}
               >
                 {repos.map(repo => (
@@ -190,7 +216,7 @@ function Header({
             <div className="selector">
               <select
                 value={selectedBranch}
-                onChange={(e) => onBranchChange(e.target.value)}
+                onChange={(e) => { trackEvent('select_branch', { branch: e.target.value }); onBranchChange(e.target.value) }}
               >
                 {branches.map(branch => (
                   <option key={branch} value={branch}>{branch}</option>
@@ -210,10 +236,11 @@ function Header({
               href={`${API_URL}/api/auth/permissions`}
               className="manage-perms"
               title="Grant access to additional GitHub organizations"
+              onClick={() => trackEvent('click_manage_permissions')}
             >
               Manage permissions
             </a>
-            <button className="sign-out" onClick={onLogout}>Sign out</button>
+            <button className="sign-out" onClick={() => { trackEvent('click_sign_out'); onLogout() }}>Sign out</button>
           </div>
         ) : (
           <button className="auth-button" onClick={handleLogin}>
@@ -230,26 +257,30 @@ function TimelineEventCard({
   event,
   index,
   isExpanded,
+  aiEnabled,
   onToggle
 }: {
   event: TimelineEvent
   index: number
   isExpanded: boolean
+  aiEnabled: boolean
   onToggle: () => void
 }) {
   const side = index % 2 === 0 ? 'left' : 'right'
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
+  const [showFullMessage, setShowFullMessage] = useState(false)
+  const isTruncated = event.description.length > 500
 
   useEffect(() => {
-    if (isExpanded && !aiSummary && !loadingSummary) {
+    if (isExpanded && aiEnabled && !aiSummary && !loadingSummary) {
       setLoadingSummary(true)
       fetchAISummary(event).then(summary => {
         setAiSummary(summary)
         setLoadingSummary(false)
       })
     }
-  }, [isExpanded, event, aiSummary, loadingSummary])
+  }, [isExpanded, aiEnabled, event, aiSummary, loadingSummary])
 
   return (
     <motion.div
@@ -257,7 +288,14 @@ function TimelineEventCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      onClick={onToggle}
+      onClick={() => {
+        trackEvent(isExpanded ? 'collapse_event' : 'expand_event', {
+          event_type: event.type,
+          event_id: event.id,
+          event_summary: event.summary
+        })
+        onToggle()
+      }}
     >
       <div className="event-dot" />
       <div className="event-content">
@@ -279,7 +317,9 @@ function TimelineEventCard({
               <div className="event-details-inner">
                 <div className="ai-summary-section">
                   <span className="ai-summary-label">AI Summary</span>
-                  {loadingSummary ? (
+                  {!aiEnabled ? (
+                    <p className="ai-summary-text disabled">AI summary is disabled. Enable the toggle above to generate summaries.</p>
+                  ) : loadingSummary ? (
                     <p className="ai-summary-text loading">Generating summary...</p>
                   ) : (
                     <p className="ai-summary-text">{aiSummary}</p>
@@ -290,11 +330,25 @@ function TimelineEventCard({
                   <span className="commit-message-label">
                     {event.type === 'pr' ? 'PR Description' : 'Commit Message'}
                   </span>
-                  <p className="commit-message-text">
-                    {event.description.length > 500
-                      ? event.description.substring(0, 500) + '...'
-                      : event.description}
-                  </p>
+                  <div className="commit-message-text">
+                    <ReactMarkdown>
+                      {isTruncated && !showFullMessage
+                        ? event.description.substring(0, 500) + '...'
+                        : event.description}
+                    </ReactMarkdown>
+                    {isTruncated && (
+                      <button
+                        className="expand-message-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          trackEvent(showFullMessage ? 'collapse_message' : 'expand_message', { event_id: event.id })
+                          setShowFullMessage(!showFullMessage)
+                        }}
+                      >
+                        {showFullMessage ? 'Show less' : 'Show full message'}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="event-stats">
@@ -310,7 +364,7 @@ function TimelineEventCard({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="event-link"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); trackEvent('click_view_on_github', { event_type: event.type, event_id: event.id }) }}
                   >
                     View on GitHub
                     <ExternalIcon />
@@ -325,7 +379,7 @@ function TimelineEventCard({
   )
 }
 
-function Timeline({ events, loading }: { events: TimelineEvent[]; loading: boolean }) {
+function Timeline({ events, loading, aiEnabled }: { events: TimelineEvent[]; loading: boolean; aiEnabled: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   if (loading) {
@@ -356,6 +410,7 @@ function Timeline({ events, loading }: { events: TimelineEvent[]; loading: boole
             event={event}
             index={index}
             isExpanded={expandedId === event.id}
+            aiEnabled={aiEnabled}
             onToggle={() => setExpandedId(expandedId === event.id ? null : event.id)}
           />
         ))}
@@ -368,10 +423,12 @@ function NavArrows({ show }: { show: boolean }) {
   if (!show) return null
 
   const scrollUp = () => {
+    trackEvent('click_nav_arrow', { direction: 'up' })
     window.scrollBy({ top: -window.innerHeight * 0.8, behavior: 'smooth' })
   }
 
   const scrollDown = () => {
+    trackEvent('click_nav_arrow', { direction: 'down' })
     window.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' })
   }
 
@@ -389,6 +446,7 @@ function NavArrows({ show }: { show: boolean }) {
 
 function LoginScreen() {
   const handleLogin = () => {
+    trackEvent('click_login')
     window.location.href = `${API_URL}/api/auth/github`
   }
 
@@ -417,6 +475,7 @@ function App() {
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingTimeline, setLoadingTimeline] = useState(false)
+  const [aiEnabled, setAiEnabled] = useState(true)
 
   // Check auth status on mount and after OAuth callback
   useEffect(() => {
@@ -502,8 +561,10 @@ function App() {
           selectedRepo={null}
           selectedBranch=""
           branches={[]}
+          aiEnabled={aiEnabled}
           onRepoChange={() => {}}
           onBranchChange={() => {}}
+          onToggleAI={() => {}}
           onLogout={() => {}}
         />
         <main className="main">
@@ -523,14 +584,16 @@ function App() {
         selectedRepo={selectedRepo}
         selectedBranch={selectedBranch}
         branches={branches}
+        aiEnabled={aiEnabled}
         onRepoChange={handleRepoChange}
         onBranchChange={setSelectedBranch}
+        onToggleAI={() => setAiEnabled(!aiEnabled)}
         onLogout={handleLogout}
       />
 
       <main className="main">
         {user ? (
-          <Timeline events={events} loading={loadingTimeline} />
+          <Timeline events={events} loading={loadingTimeline} aiEnabled={aiEnabled} />
         ) : (
           <LoginScreen />
         )}
