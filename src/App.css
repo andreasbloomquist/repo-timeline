@@ -129,6 +129,21 @@
   color: var(--gray);
 }
 
+.manage-perms {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--gray);
+  padding: 4px 8px;
+  border-radius: 3px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.manage-perms:hover {
+  background: var(--gray-lighter);
+  color: var(--black);
+}
+
 .sign-out {
   font-family: var(--font-mono);
   font-size: 10px;
