@@ -5,16 +5,15 @@ export const config = { runtime: 'edge' };
 function generateSummary(text) {
   let clean = text
     .replace(/^(feat|fix|chore|docs|style|refactor|test|build|ci|perf|revert)(\(.+?\))?:?\s*/i, '')
-    .replace(/^\[.+?\]\s*/, '')
-    .replace(/^(add|update|fix|remove|implement|create|delete|refactor)\s+/i, '');
+    .replace(/^\[.+?\]\s*/, '');
 
   const words = clean.split(/\s+/).filter(w => w.length > 0);
 
-  if (words.length <= 3) {
-    return words.join(' ').substring(0, 30);
+  if (words.length <= 4) {
+    return words.join(' ');
   }
 
-  return words.slice(0, 3).join(' ').substring(0, 30);
+  return words.slice(0, 4).join(' ') + '...';
 }
 
 export default async function handler(request) {
