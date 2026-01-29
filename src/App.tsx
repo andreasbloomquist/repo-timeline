@@ -263,9 +263,15 @@ function TimelineEventCard({
       <div className="event-content">
         <div className="event-summary">{event.summary}</div>
         <div className="event-date">{formatDate(event.date)}</div>
-        <span className="event-type">
-          {event.type === 'pr' ? `PR #${event.prNumber}` : `${event.sha}`}
-        </span>
+        <div className="event-meta">
+          <span className="event-type">
+            {event.type === 'pr' ? `PR #${event.prNumber}` : `${event.sha}`}
+          </span>
+          <span className="event-lines">
+            <span className="stat-add">+{event.additions.toLocaleString()}</span>
+            <span className="stat-del">-{event.deletions.toLocaleString()}</span>
+          </span>
+        </div>
 
         <AnimatePresence>
           {isExpanded && (
