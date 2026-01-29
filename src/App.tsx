@@ -206,6 +206,13 @@ function Header({
           <div className="user-info">
             <img src={user.avatar} alt={user.login} className="user-avatar" />
             <span className="user-name">{user.login}</span>
+            <a
+              href={`${API_URL}/api/auth/permissions`}
+              className="manage-perms"
+              title="Grant access to additional GitHub organizations"
+            >
+              Manage permissions
+            </a>
             <button className="sign-out" onClick={onLogout}>Sign out</button>
           </div>
         ) : (
