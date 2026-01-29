@@ -5,7 +5,7 @@ export const config = { runtime: 'edge' };
 export default async function handler(request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+  const baseUrl = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'http://localhost:3000');
 
   if (!code) {
     return Response.redirect(`${baseUrl}?error=no_code`, 302);
