@@ -1,73 +1,73 @@
-# React + TypeScript + Vite
+# Repo Timeline
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A visual timeline of meaningful changes in a GitHub repository, explained in plain English.
 
-Currently, two official plugins are available:
+## Why
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+In the era of vibe coding, codebases change fast. A single session with an AI coding assistant can produce dozens of commits and PRs with thousands of lines changed. Traditional commit logs become noise -- endless lists of diffs that are hard to parse and even harder to understand at a glance.
 
-## React Compiler
+Repo Timeline cuts through that noise. It pulls the changes that actually matter (merged PRs and large commits), plots them on a clean vertical timeline, and uses AI to summarize what each change actually did in plain language. Instead of reading diffs, you read sentences.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## What it does
 
-## Expanding the ESLint configuration
+- Connects to your GitHub account via OAuth
+- Lets you select any repo and branch you have access to
+- Displays a vertical timeline of major changes:
+  - All merged pull requests
+  - Direct commits with 100+ line changes
+- Click any event to expand it and get an AI-generated summary of the change
+- Links back to the original PR or commit on GitHub
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Stack
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **Frontend**: React + TypeScript + Vite
+- **Backend**: Express (local dev) / Vercel Edge Functions (production)
+- **Auth**: GitHub OAuth with JWT sessions
+- **AI**: Anthropic Claude API for change summaries
+- **Styling**: Custom CSS, IBM Plex Mono, minimal black-and-white aesthetic
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Setup
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 1. Create a GitHub OAuth App
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Click "New OAuth App"
+3. Set Homepage URL: `http://localhost:5173`
+4. Set Callback URL: `http://localhost:3001/api/auth/callback`
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Add your credentials to `.env`:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+SESSION_SECRET=any-random-string
+ANTHROPIC_API_KEY=your_anthropic_key
+```
+
+The Anthropic API key is optional -- the app works without it but won't generate AI summaries.
+
+### 3. Run locally
+
+```bash
+npm install
+npm run dev      # starts Vite on :5173
+node server.js   # starts Express on :3001
+```
+
+Open `http://localhost:5173`, sign in with GitHub, and select a repo.
+
+## Deploying to Vercel
+
+The `api/` directory contains Edge Functions that replace the Express server in production. Set the same environment variables in your Vercel project settings, plus:
+
+```
+APP_URL=https://your-production-url.vercel.app
+```
+
+Update your GitHub OAuth App's callback URL to `https://your-production-url.vercel.app/api/auth/callback`.

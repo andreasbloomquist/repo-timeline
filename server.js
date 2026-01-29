@@ -97,6 +97,12 @@ app.get('/api/user', (req, res) => {
   res.json(req.session.user);
 });
 
+// Manage GitHub org permissions
+app.get('/api/auth/permissions', (req, res) => {
+  const permissionsUrl = `https://github.com/settings/connections/applications/${GITHUB_CLIENT_ID}`;
+  res.redirect(permissionsUrl);
+});
+
 // Logout
 app.post('/api/auth/logout', (req, res) => {
   req.session.destroy();
