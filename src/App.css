@@ -229,6 +229,13 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--gray);
+  margin-bottom: 12px;
+}
+
+.login-tagline {
+  font-size: 14px;
+  color: var(--black);
+  line-height: 1.6;
   margin-bottom: 32px;
 }
 
@@ -263,21 +270,75 @@
   line-height: 1.6;
 }
 
-.privacy-link {
-  position: fixed;
-  bottom: 12px;
-  right: 16px;
+.login-about {
+  max-width: 560px;
+  margin-top: 64px;
+  padding-top: 48px;
+  border-top: 1px solid var(--gray-light);
+  text-align: left;
+}
+
+.login-about details {
+  border-bottom: 1px solid var(--gray-light);
+}
+
+.login-about details:last-child {
+  border-bottom: none;
+}
+
+.login-about summary {
   font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.03em;
-  color: var(--gray-light);
-  text-decoration: none;
-  z-index: 50;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--black);
+  padding: 16px 0;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   transition: color 0.15s ease;
 }
 
-.privacy-link:hover {
+.login-about summary::-webkit-details-marker {
+  display: none;
+}
+
+.login-about summary::after {
+  content: '+';
+  font-size: 14px;
+  font-weight: 400;
   color: var(--gray);
+  transition: transform 0.2s ease;
+}
+
+.login-about details[open] summary::after {
+  content: '-';
+}
+
+.login-about summary:hover {
+  color: var(--gray);
+}
+
+.login-about p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--gray);
+  margin: 0 0 16px;
+}
+
+.login-about ul {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+
+.login-about li {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--gray);
+  margin-bottom: 4px;
 }
 
 /* Timeline Container - full height */
