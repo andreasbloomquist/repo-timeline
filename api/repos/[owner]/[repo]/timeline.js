@@ -153,7 +153,7 @@ export default async function handler(request) {
             additions: commitDetail.stats?.additions || 0,
             deletions: commitDetail.stats?.deletions || 0,
             url: commit.html_url,
-            sha: commit.sha.substring(0, 7)
+            sha: commit.sha
           });
         }
       } catch (e) {

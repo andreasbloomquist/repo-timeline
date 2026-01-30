@@ -151,8 +151,9 @@ async function logout(): Promise<void> {
   await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' })
 }
 
-async function fetchAISummary(event: TimelineEvent): Promise<string> {
+async function fetchAISummary(event: TimelineEvent, repoFullName: string): Promise<string> {
   try {
+    const [owner, repo] = repoFullName.split('/')
     const res = await fetch(`${API_URL}/api/summarize`, {
       method: 'POST',
       credentials: 'include',
@@ -162,14 +163,18 @@ async function fetchAISummary(event: TimelineEvent): Promise<string> {
         title: event.summary,
         description: event.description,
         additions: event.additions,
-        deletions: event.deletions
+        deletions: event.deletions,
+        owner,
+        repo,
+        prNumber: event.prNumber,
+        sha: event.sha
       })
     })
     if (!res.ok) return 'Unable to generate AI summary.'
     const data = await res.json()
     return data.summary || 'Unable to generate AI summary.'
   } catch {
-    return event.description
+    return 'Unable to generate AI summary.'
   }
 }
 
@@ -345,12 +350,14 @@ function TimelineEventCard({
   index,
   isExpanded,
   aiEnabled,
+  repoFullName,
   onToggle
 }: {
   event: TimelineEvent
   index: number
   isExpanded: boolean
   aiEnabled: boolean
+  repoFullName: string
   onToggle: () => void
 }) {
   const side = index % 2 === 0 ? 'left' : 'right'
@@ -363,7 +370,7 @@ function TimelineEventCard({
   useEffect(() => {
     if (isExpanded && aiEnabled && !aiSummary && !loadingSummary) {
       setLoadingSummary(true)
-      fetchAISummary(event).then(summary => {
+      fetchAISummary(event, repoFullName).then(summary => {
         setAiSummary(summary)
         setLoadingSummary(false)
       })
@@ -414,7 +421,7 @@ function TimelineEventCard({
           <div className="event-date">{formatDate(event.date)}</div>
           <div className="event-meta">
             <span className="event-type">
-              {event.type === 'pr' ? `PR #${event.prNumber}` : `${event.sha}`}
+              {event.type === 'pr' ? `PR #${event.prNumber}` : `${event.sha?.substring(0, 7)}`}
             </span>
             <span className="event-lines">
               <span className="stat-add">+{event.additions.toLocaleString()}</span>
@@ -547,7 +554,7 @@ function computeTimeGaps(events: TimelineEvent[]) {
 const INITIAL_BATCH = 5
 const LOAD_MORE = 6
 
-function Timeline({ events, loading, aiEnabled }: { events: TimelineEvent[]; loading: boolean; aiEnabled: boolean }) {
+function Timeline({ events, loading, aiEnabled, repoFullName }: { events: TimelineEvent[]; loading: boolean; aiEnabled: boolean; repoFullName: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -610,6 +617,7 @@ function Timeline({ events, loading, aiEnabled }: { events: TimelineEvent[]; loa
               index={index}
               isExpanded={expandedId === event.id}
               aiEnabled={aiEnabled}
+              repoFullName={repoFullName}
               onToggle={() => setExpandedId(expandedId === event.id ? null : event.id)}
             />
           </div>
@@ -953,7 +961,7 @@ function App() {
 
       <main className="main">
         {user ? (
-          <Timeline events={events} loading={loadingTimeline} aiEnabled={aiEnabled} />
+          <Timeline events={events} loading={loadingTimeline} aiEnabled={aiEnabled} repoFullName={selectedRepo?.fullName || ''} />
         ) : (
           <LoginScreen />
         )}

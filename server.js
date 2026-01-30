@@ -279,7 +279,7 @@ app.get('/api/repos/:owner/:repo/timeline', async (req, res) => {
             additions: commitDetail.stats?.additions || 0,
             deletions: commitDetail.stats?.deletions || 0,
             url: commit.html_url,
-            sha: commit.sha.substring(0, 7)
+            sha: commit.sha
           });
         }
       } catch (e) {
@@ -303,7 +303,7 @@ app.post('/api/summarize', async (req, res) => {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
-  const { type, title, description, additions, deletions, files } = req.body;
+  const { type, title, description, additions, deletions, owner, repo, prNumber, sha } = req.body;
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.json({
@@ -318,15 +318,53 @@ app.post('/api/summarize', async (req, res) => {
       apiKey: process.env.ANTHROPIC_API_KEY
     });
 
+    // Fetch the diff from GitHub
+    const octokit = new Octokit({ auth: req.session.accessToken });
+    let diff = '';
+    let filesChanged = [];
+
+    try {
+      if (type === 'pr' && prNumber) {
+        const { data: prFiles } = await octokit.pulls.listFiles({
+          owner, repo, pull_number: prNumber, per_page: 50
+        });
+        filesChanged = prFiles.map(f => f.filename);
+        // Include patches (truncated to keep prompt reasonable)
+        diff = prFiles
+          .filter(f => f.patch)
+          .map(f => `--- ${f.filename}\n${f.patch}`)
+          .join('\n\n');
+      } else if (sha) {
+        const { data: commitDetail } = await octokit.repos.getCommit({
+          owner, repo, ref: sha
+        });
+        filesChanged = (commitDetail.files || []).map(f => f.filename);
+        diff = (commitDetail.files || [])
+          .filter(f => f.patch)
+          .map(f => `--- ${f.filename}\n${f.patch}`)
+          .join('\n\n');
+      }
+    } catch (e) {
+      // Continue without diff — still summarize from title/description
+    }
+
+    // Truncate diff to avoid token limits
+    const maxDiffLen = 6000;
+    const truncatedDiff = diff.length > maxDiffLen
+      ? diff.substring(0, maxDiffLen) + '\n... (diff truncated)'
+      : diff;
+
     const prompt = `You are a senior code reviewer summarizing a ${type === 'pr' ? 'pull request' : 'commit'} for a team lead who needs to quickly understand what changed.
 
 Title: ${title}
 Description: ${description || 'No description provided'}
 Lines added: ${additions}
 Lines deleted: ${deletions}
-${files ? `Files changed: ${files.join(', ')}` : ''}
+Files changed: ${filesChanged.join(', ') || 'unknown'}
 
-Write a 1-2 sentence summary. Be direct and specific — state what was changed and why in plain English. No filler, no restating the title, no implementation details like file names or function signatures. Use present tense. Do not start with "This commit" or "This PR".`;
+${truncatedDiff ? `Code diff:\n\`\`\`\n${truncatedDiff}\n\`\`\`` : ''}
+
+Write a 1-2 sentence summary based on the actual code changes, the title, and the description. Be direct and specific — state what was changed and why in plain English. No filler, no restating the title, no implementation details like file names or function signatures. Use present tense. Do not start with "This commit" or "This PR".`;
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
