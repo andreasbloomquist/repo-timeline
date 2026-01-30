@@ -137,9 +137,9 @@ async function fetchBranches(owner: string, repo: string): Promise<string[]> {
   }
 }
 
-async function fetchTimeline(owner: string, repo: string, branch: string): Promise<TimelineEvent[]> {
+async function fetchTimeline(owner: string, repo: string, branch: string, minLines: number = 100): Promise<TimelineEvent[]> {
   try {
-    const res = await fetch(`${API_URL}/api/repos/${owner}/${repo}/timeline?branch=${encodeURIComponent(branch)}`, { credentials: 'include' })
+    const res = await fetch(`${API_URL}/api/repos/${owner}/${repo}/timeline?branch=${encodeURIComponent(branch)}&minLines=${minLines}`, { credentials: 'include' })
     if (!res.ok) return []
     return await res.json()
   } catch {
@@ -174,7 +174,7 @@ async function fetchAISummary(event: TimelineEvent): Promise<string> {
 }
 
 // Components
-function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
+function UserMenu({ user, minLines, onMinLinesChange, onLogout }: { user: User; minLines: number; onMinLinesChange: (v: number) => void; onLogout: () => void }) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -207,6 +207,26 @@ function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
               <span className="user-menu-login">{user.login}</span>
             </div>
             <div className="user-menu-divider" />
+            <div className="user-menu-slider">
+              <div className="user-menu-slider-row">
+                <span className="user-menu-slider-label">Min diff</span>
+                <span className="user-menu-slider-value">{minLines}+</span>
+              </div>
+              <input
+                type="range"
+                className="diff-slider-input"
+                min={50}
+                max={500}
+                step={50}
+                value={minLines}
+                onChange={(e) => {
+                  const val = Number(e.target.value)
+                  trackEvent('change_min_lines', { min_lines: val })
+                  onMinLinesChange(val)
+                }}
+              />
+            </div>
+            <div className="user-menu-divider" />
             <a
               href={`${API_URL}/api/auth/permissions`}
               className="user-menu-item"
@@ -234,9 +254,11 @@ function Header({
   selectedBranch,
   branches,
   aiEnabled,
+  minLines,
   onRepoChange,
   onBranchChange,
   onToggleAI,
+  onMinLinesChange,
   onLogout
 }: {
   user: User | null
@@ -245,9 +267,11 @@ function Header({
   selectedBranch: string
   branches: string[]
   aiEnabled: boolean
+  minLines: number
   onRepoChange: (repo: Repo) => void
   onBranchChange: (branch: string) => void
   onToggleAI: () => void
+  onMinLinesChange: (value: number) => void
   onLogout: () => void
 }) {
   const handleLogin = () => {
@@ -304,7 +328,7 @@ function Header({
       </div>
       <div className="header-right">
         {user ? (
-          <UserMenu user={user} onLogout={onLogout} />
+          <UserMenu user={user} minLines={minLines} onMinLinesChange={onMinLinesChange} onLogout={onLogout} />
         ) : (
           <button className="auth-button" onClick={handleLogin}>
             <GitHubIcon />
@@ -608,12 +632,14 @@ function LoginScreen() {
     window.location.href = `${API_URL}/api/auth/github`
   }
 
+  const [demoExpanded, setDemoExpanded] = useState<number | null>(null)
+
   const demoEvents = [
-    { label: 'Refactor auth flow', type: 'pr', lines: '+342 -89', delay: 0 },
-    { label: 'Add dark mode support', type: 'pr', lines: '+1,204 -67', delay: 0.12 },
-    { label: 'Fix memory leak in worker', type: 'commit', lines: '+18 -45', delay: 0.24 },
-    { label: 'Migrate to Edge Runtime', type: 'pr', lines: '+890 -1,102', delay: 0.36 },
-    { label: 'Update API rate limiting', type: 'commit', lines: '+156 -23', delay: 0.48 },
+    { label: 'Refactor auth flow', type: 'pr', prNumber: 47, additions: 342, deletions: 89, date: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), summary: 'Replaced the legacy session-based auth with a JWT token flow. Moved token refresh logic into a shared middleware and removed three deprecated endpoints.', delay: 0 },
+    { label: 'Add dark mode support', type: 'pr', prNumber: 44, additions: 1204, deletions: 67, date: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(), summary: 'Introduced a theme provider with system-preference detection and manual toggle. All color values moved to CSS custom properties with light and dark variants.', delay: 0.12 },
+    { label: 'Fix memory leak in worker', type: 'commit', sha: 'a3f8c21', additions: 118, deletions: 45, date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(), summary: 'The background sync worker was holding references to completed promises, causing memory to grow over time. Added cleanup on task completion.', delay: 0.24 },
+    { label: 'Migrate to Edge Runtime', type: 'pr', prNumber: 38, additions: 890, deletions: 1102, date: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(), summary: 'Converted all API routes from Node.js serverless functions to Vercel Edge Runtime. Replaced incompatible Node APIs with web-standard equivalents.', delay: 0.36 },
+    { label: 'Update API rate limiting', type: 'commit', sha: 'e7b2d09', additions: 156, deletions: 23, date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), summary: 'Switched from fixed-window to sliding-window rate limiting. Added per-user limits alongside the global limit and improved the 429 response with retry-after headers.', delay: 0.48 },
   ]
 
   return (
@@ -665,16 +691,39 @@ function LoginScreen() {
               {demoEvents.map((evt, i) => (
                 <motion.div
                   key={i}
-                  className={`login-demo-event ${i % 2 === 0 ? 'left' : 'right'}`}
+                  className={`login-demo-event ${i % 2 === 0 ? 'left' : 'right'} ${demoExpanded === i ? 'expanded' : ''}`}
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.6 + evt.delay, ease: [0.16, 1, 0.3, 1] }}
+                  onClick={(e) => { e.stopPropagation(); setDemoExpanded(demoExpanded === i ? null : i) }}
                 >
                   <div className="login-demo-node" />
                   <div className="login-demo-card">
-                    <span className="login-demo-card-type">{evt.type}</span>
                     <span className="login-demo-card-label">{evt.label}</span>
-                    <span className="login-demo-card-lines">{evt.lines}</span>
+                    <span className="login-demo-card-date">{formatDate(evt.date)}</span>
+                    <div className="login-demo-card-meta">
+                      <span className="login-demo-card-type">{evt.type === 'pr' ? `PR #${evt.prNumber}` : evt.sha}</span>
+                      <span className="login-demo-card-lines">
+                        <span className="stat-add">+{evt.additions.toLocaleString()}</span>
+                        <span className="stat-del">-{evt.deletions.toLocaleString()}</span>
+                      </span>
+                    </div>
+                    <AnimatePresence>
+                      {demoExpanded === i && (
+                        <motion.div
+                          className="login-demo-card-details"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                        >
+                          <div className="login-demo-card-summary">
+                            <span className="login-demo-card-summary-label">AI Summary</span>
+                            <p>{evt.summary}</p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </motion.div>
               ))}
@@ -757,6 +806,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [loadingTimeline, setLoadingTimeline] = useState(false)
   const [aiEnabled, setAiEnabled] = useState(true)
+  const [minLines, setMinLines] = useState(100)
 
   // Check auth status on mount and after OAuth callback
   useEffect(() => {
@@ -802,7 +852,7 @@ function App() {
     loadBranches()
   }, [selectedRepo])
 
-  // Fetch timeline when branch changes
+  // Fetch timeline when branch or threshold changes
   useEffect(() => {
     if (!selectedRepo || !selectedBranch) {
       setEvents([])
@@ -812,12 +862,12 @@ function App() {
     const loadTimeline = async () => {
       setLoadingTimeline(true)
       const [owner, repo] = selectedRepo.fullName.split('/')
-      const timelineData = await fetchTimeline(owner, repo, selectedBranch)
+      const timelineData = await fetchTimeline(owner, repo, selectedBranch, minLines)
       setEvents(timelineData)
       setLoadingTimeline(false)
     }
     loadTimeline()
-  }, [selectedRepo, selectedBranch])
+  }, [selectedRepo, selectedBranch, minLines])
 
   const handleLogout = async () => {
     await logout()
@@ -843,9 +893,11 @@ function App() {
           selectedBranch=""
           branches={[]}
           aiEnabled={aiEnabled}
+          minLines={minLines}
           onRepoChange={() => {}}
           onBranchChange={() => {}}
           onToggleAI={() => {}}
+          onMinLinesChange={() => {}}
           onLogout={() => {}}
         />
         <main className="main">
@@ -867,9 +919,11 @@ function App() {
           selectedBranch={selectedBranch}
           branches={branches}
           aiEnabled={aiEnabled}
+          minLines={minLines}
           onRepoChange={handleRepoChange}
           onBranchChange={setSelectedBranch}
           onToggleAI={() => setAiEnabled(!aiEnabled)}
+          onMinLinesChange={setMinLines}
           onLogout={handleLogout}
         />
       )}

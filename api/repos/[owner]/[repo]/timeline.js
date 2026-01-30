@@ -41,6 +41,7 @@ export default async function handler(request) {
   const owner = pathParts[repoIndex + 1];
   const repo = pathParts[repoIndex + 2];
   const branch = url.searchParams.get('branch') || 'main';
+  const threshold = parseInt(url.searchParams.get('minLines')) || 100;
 
   const headers = {
     'Authorization': `Bearer ${payload.accessToken}`,
@@ -85,22 +86,25 @@ export default async function handler(request) {
           // Continue without PR commits list
         }
 
-        // Include ALL merged PRs regardless of line count
-        events.push({
-          id: `pr-${pr.number}`,
-          type: 'pr',
-          summary: generateSummary(pr.title),
-          description: pr.body || 'No description provided.',
-          date: pr.merged_at,
-          author: {
-            name: pr.user.login,
-            avatar: pr.user.avatar_url
-          },
-          additions: prDetail.additions || 0,
-          deletions: prDetail.deletions || 0,
-          url: pr.html_url,
-          prNumber: pr.number
-        });
+        // Only include PRs that meet the line threshold
+        const prTotalChanges = (prDetail.additions || 0) + (prDetail.deletions || 0);
+        if (prTotalChanges > threshold) {
+          events.push({
+            id: `pr-${pr.number}`,
+            type: 'pr',
+            summary: generateSummary(pr.title),
+            description: pr.body || 'No description provided.',
+            date: pr.merged_at,
+            author: {
+              name: pr.user.login,
+              avatar: pr.user.avatar_url
+            },
+            additions: prDetail.additions || 0,
+            deletions: prDetail.deletions || 0,
+            url: pr.html_url,
+            prNumber: pr.number
+          });
+        }
       } catch (e) {
         // Skip PRs we can't fetch
       }
@@ -134,8 +138,8 @@ export default async function handler(request) {
 
         const totalChanges = (commitDetail.stats?.additions || 0) + (commitDetail.stats?.deletions || 0);
 
-        // Only include direct commits with >100 line changes
-        if (totalChanges > 100) {
+        // Only include direct commits with line changes above threshold
+        if (totalChanges > threshold) {
           events.push({
             id: `commit-${commit.sha}`,
             type: 'commit',
