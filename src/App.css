@@ -635,6 +635,12 @@
 }
 
 /* Timeline wrapper for events */
+.timeline-sentinel {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
 .timeline {
   position: relative;
   max-width: 1200px;
@@ -793,10 +799,49 @@
   margin: 0;
 }
 
-.ai-summary-text.loading,
 .ai-summary-text.disabled {
   color: var(--gray);
   font-style: italic;
+}
+
+.ai-summary-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-shimmer-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-shimmer-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--gray-light) 0%,
+    var(--gray-lighter) 40%,
+    var(--gray-light) 60%,
+    var(--gray-lighter) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.ai-summary-loading-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray);
+  opacity: 0.6;
 }
 
 /* Commit Message Section */
@@ -1078,6 +1123,24 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--gray);
+}
+
+/* Privacy link */
+.privacy-link {
+  position: fixed;
+  bottom: 16px;
+  right: 20px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--gray);
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+  z-index: 50;
+}
+
+.privacy-link:hover {
+  opacity: 1;
 }
 
 /* Responsive */

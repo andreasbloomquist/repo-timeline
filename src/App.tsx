@@ -400,9 +400,23 @@ function TimelineEventCard({
                   {!aiEnabled ? (
                     <p className="ai-summary-text disabled">AI summary is disabled. Enable the toggle above to generate summaries.</p>
                   ) : loadingSummary ? (
-                    <p className="ai-summary-text loading">Generating summary...</p>
+                    <div className="ai-summary-loading">
+                      <div className="ai-shimmer-lines">
+                        <div className="ai-shimmer-line" style={{ width: '92%' }} />
+                        <div className="ai-shimmer-line" style={{ width: '78%', animationDelay: '0.1s' }} />
+                        <div className="ai-shimmer-line" style={{ width: '85%', animationDelay: '0.2s' }} />
+                      </div>
+                      <span className="ai-summary-loading-label">Generating summary</span>
+                    </div>
                   ) : (
-                    <p className="ai-summary-text">{aiSummary}</p>
+                    <motion.p
+                      className="ai-summary-text"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.4 }}
+                    >
+                      {aiSummary}
+                    </motion.p>
                   )}
                 </div>
 
@@ -483,9 +497,40 @@ function computeTimeGaps(events: TimelineEvent[]) {
   })
 }
 
+const INITIAL_BATCH = 5
+const LOAD_MORE = 6
+
 function Timeline({ events, loading, aiEnabled }: { events: TimelineEvent[]; loading: boolean; aiEnabled: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const margins = computeTimeGaps(events)
+
+  // Reset visible count when events change (new repo/branch)
+  useEffect(() => {
+    setVisibleCount(INITIAL_BATCH)
+    setExpandedId(null)
+  }, [events])
+
+  // Intersection observer to load more on scroll
+  useEffect(() => {
+    if (visibleCount >= events.length) return
+
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisibleCount(prev => Math.min(prev + LOAD_MORE, events.length))
+        }
+      },
+      { rootMargin: '200px' }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [visibleCount, events.length])
 
   if (loading) {
     return (
@@ -505,11 +550,13 @@ function Timeline({ events, loading, aiEnabled }: { events: TimelineEvent[]; loa
     )
   }
 
+  const visible = events.slice(0, visibleCount)
+
   return (
     <div className="timeline-container">
       <div className="timeline-spine" />
       <div className="timeline">
-        {events.map((event, index) => (
+        {visible.map((event, index) => (
           <div key={event.id} style={{ marginBottom: margins[index] }}>
             <TimelineEventCard
               event={event}
@@ -520,6 +567,11 @@ function Timeline({ events, loading, aiEnabled }: { events: TimelineEvent[]; loa
             />
           </div>
         ))}
+        {visibleCount < events.length && (
+          <div ref={sentinelRef} className="timeline-sentinel">
+            <div className="loading-spinner" />
+          </div>
+        )}
       </div>
     </div>
   )
