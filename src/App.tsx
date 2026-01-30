@@ -80,8 +80,30 @@ const ArrowDownIcon = () => (
 
 // Format date
 const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diffMs = now - then
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDays = Math.floor(diffHr / 24)
+  const diffWeeks = Math.floor(diffDays / 7)
+  const diffMonths = Math.floor(diffDays / 30)
+  const diffYears = Math.floor(diffDays / 365)
+
+  if (diffSec < 60) return 'just now'
+  if (diffMin === 1) return '1 minute ago'
+  if (diffMin < 60) return `${diffMin} minutes ago`
+  if (diffHr === 1) return '1 hour ago'
+  if (diffHr < 24) return `${diffHr} hours ago`
+  if (diffDays === 1) return '1 day ago'
+  if (diffDays < 7) return `${diffDays} days ago`
+  if (diffWeeks === 1) return '1 week ago'
+  if (diffDays < 30) return `${diffWeeks} weeks ago`
+  if (diffMonths === 1) return '1 month ago'
+  if (diffMonths < 12) return `${diffMonths} months ago`
+  if (diffYears === 1) return '1 year ago'
+  return `${diffYears} years ago`
 }
 
 // API functions
@@ -152,6 +174,59 @@ async function fetchAISummary(event: TimelineEvent): Promise<string> {
 }
 
 // Components
+function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  return (
+    <div className="user-menu" ref={menuRef}>
+      <button className="user-menu-trigger" onClick={() => setOpen(!open)}>
+        <img src={user.avatar} alt={user.login} className="user-avatar" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="user-menu-dropdown"
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="user-menu-header">
+              <span className="user-menu-name">{user.name || user.login}</span>
+              <span className="user-menu-login">{user.login}</span>
+            </div>
+            <div className="user-menu-divider" />
+            <a
+              href={`${API_URL}/api/auth/permissions`}
+              className="user-menu-item"
+              onClick={() => { trackEvent('click_manage_permissions'); setOpen(false) }}
+            >
+              Manage permissions
+            </a>
+            <button
+              className="user-menu-item"
+              onClick={() => { trackEvent('click_sign_out'); onLogout(); setOpen(false) }}
+            >
+              Sign out
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function Header({
   user,
   repos,
@@ -229,19 +304,7 @@ function Header({
       </div>
       <div className="header-right">
         {user ? (
-          <div className="user-info">
-            <img src={user.avatar} alt={user.login} className="user-avatar" />
-            <span className="user-name">{user.login}</span>
-            <a
-              href={`${API_URL}/api/auth/permissions`}
-              className="manage-perms"
-              title="Grant access to additional GitHub organizations"
-              onClick={() => trackEvent('click_manage_permissions')}
-            >
-              Manage permissions
-            </a>
-            <button className="sign-out" onClick={() => { trackEvent('click_sign_out'); onLogout() }}>Sign out</button>
-          </div>
+          <UserMenu user={user} onLogout={onLogout} />
         ) : (
           <button className="auth-button" onClick={handleLogin}>
             <GitHubIcon />
@@ -396,8 +459,33 @@ function TimelineEventCard({
   )
 }
 
+function computeTimeGaps(events: TimelineEvent[]) {
+  if (events.length < 2) return events.map(() => 60)
+
+  const timestamps = events.map(e => new Date(e.date).getTime())
+  const gaps: number[] = []
+  for (let i = 0; i < timestamps.length - 1; i++) {
+    gaps.push(Math.abs(timestamps[i] - timestamps[i + 1]))
+  }
+  // Last event has no gap after it
+  gaps.push(0)
+
+  const maxGap = Math.max(...gaps.filter((_, i) => i < gaps.length - 1))
+  if (maxGap === 0) return events.map(() => 60)
+
+  const MIN_MARGIN = 40
+  const MAX_MARGIN = 240
+
+  return gaps.map((gap, i) => {
+    if (i === gaps.length - 1) return 0
+    const ratio = gap / maxGap
+    return MIN_MARGIN + ratio * (MAX_MARGIN - MIN_MARGIN)
+  })
+}
+
 function Timeline({ events, loading, aiEnabled }: { events: TimelineEvent[]; loading: boolean; aiEnabled: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const margins = computeTimeGaps(events)
 
   if (loading) {
     return (
@@ -422,14 +510,15 @@ function Timeline({ events, loading, aiEnabled }: { events: TimelineEvent[]; loa
       <div className="timeline-spine" />
       <div className="timeline">
         {events.map((event, index) => (
-          <TimelineEventCard
-            key={event.id}
-            event={event}
-            index={index}
-            isExpanded={expandedId === event.id}
-            aiEnabled={aiEnabled}
-            onToggle={() => setExpandedId(expandedId === event.id ? null : event.id)}
-          />
+          <div key={event.id} style={{ marginBottom: margins[index] }}>
+            <TimelineEventCard
+              event={event}
+              index={index}
+              isExpanded={expandedId === event.id}
+              aiEnabled={aiEnabled}
+              onToggle={() => setExpandedId(expandedId === event.id ? null : event.id)}
+            />
+          </div>
         ))}
       </div>
     </div>
@@ -467,19 +556,111 @@ function LoginScreen() {
     window.location.href = `${API_URL}/api/auth/github`
   }
 
+  const demoEvents = [
+    { label: 'Refactor auth flow', type: 'pr', lines: '+342 -89', delay: 0 },
+    { label: 'Add dark mode support', type: 'pr', lines: '+1,204 -67', delay: 0.12 },
+    { label: 'Fix memory leak in worker', type: 'commit', lines: '+18 -45', delay: 0.24 },
+    { label: 'Migrate to Edge Runtime', type: 'pr', lines: '+890 -1,102', delay: 0.36 },
+    { label: 'Update API rate limiting', type: 'commit', lines: '+156 -23', delay: 0.48 },
+  ]
+
   return (
     <div className="login-screen">
-      <div className="login-content">
-        <h1 className="login-title">Repo Timeline</h1>
-        <p className="login-tagline">Visualize your GitHub repository changes in plain English.</p>
-        <button className="login-button" onClick={handleLogin}>
-          <GitHubIcon />
-          Sign in with GitHub
-        </button>
-        <p className="login-hint">
-          Connect your GitHub account to see a visual timeline of merged PRs and major commits, with AI-powered summaries that explain what changed and why.
-        </p>
+      <div className="login-hero">
+        <motion.div
+          className="login-hero-text"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <span className="login-label">Repo Timeline</span>
+          <h1 className="login-headline">
+            Your commit history,<br />
+            <em>in plain English.</em>
+          </h1>
+          <p className="login-subhead">
+            See merged PRs and major commits on a visual timeline with AI&#8209;powered summaries. Built for the era of vibe coding.
+          </p>
+          <motion.button
+            className="login-button"
+            onClick={handleLogin}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <GitHubIcon />
+            Sign in with GitHub
+          </motion.button>
+          <p className="login-note">Free &middot; Open source &middot; No data stored</p>
+        </motion.div>
+
+        <motion.div
+          className="login-demo"
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div className="login-demo-window">
+            <div className="login-demo-bar">
+              <span className="login-demo-dot" />
+              <span className="login-demo-dot" />
+              <span className="login-demo-dot" />
+            </div>
+            <div className="login-demo-content">
+              <div className="login-demo-spine" />
+              {demoEvents.map((evt, i) => (
+                <motion.div
+                  key={i}
+                  className={`login-demo-event ${i % 2 === 0 ? 'left' : 'right'}`}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.6 + evt.delay, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  <div className="login-demo-node" />
+                  <div className="login-demo-card">
+                    <span className="login-demo-card-type">{evt.type}</span>
+                    <span className="login-demo-card-label">{evt.label}</span>
+                    <span className="login-demo-card-lines">{evt.lines}</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
       </div>
+
+      <section className="login-features" aria-label="Features">
+        <motion.div
+          className="login-features-grid"
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div className="login-feature">
+            <div className="login-feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="6" r="2"/><circle cx="12" cy="18" r="2"/></svg>
+            </div>
+            <h3>Visual Timeline</h3>
+            <p>Merged PRs and large commits displayed chronologically on a vertical timeline.</p>
+          </div>
+          <div className="login-feature">
+            <div className="login-feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <h3>AI Summaries</h3>
+            <p>Each change explained in plain English by Claude, so you understand the &ldquo;why&rdquo; not just the diff.</p>
+          </div>
+          <div className="login-feature">
+            <div className="login-feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+            </div>
+            <h3>Any Repo, Any Branch</h3>
+            <p>Works with public and private repositories. Switch between branches to explore different histories.</p>
+          </div>
+        </motion.div>
+      </section>
 
       <section className="login-about" aria-label="About Repo Timeline">
         <details>
