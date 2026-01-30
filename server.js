@@ -325,7 +325,7 @@ ${files ? `Files changed: ${files.join(', ')}` : ''}
 Write a clear, concise 2-3 sentence summary explaining what this change does in plain English. Focus on the "what" and "why", not implementation details. Write in present tense.`;
 
     const message = await client.messages.create({
-      model: 'claude-3-haiku-20240307',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 200,
       messages: [
         { role: 'user', content: prompt }
