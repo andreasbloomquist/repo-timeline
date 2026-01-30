@@ -165,9 +165,9 @@ async function fetchAISummary(event: TimelineEvent): Promise<string> {
         deletions: event.deletions
       })
     })
-    if (!res.ok) return event.description
+    if (!res.ok) return 'Unable to generate AI summary.'
     const data = await res.json()
-    return data.summary || event.description
+    return data.summary || 'Unable to generate AI summary.'
   } catch {
     return event.description
   }
@@ -370,6 +370,18 @@ function TimelineEventCard({
     }
   }, [isExpanded, aiEnabled, event, aiSummary, loadingSummary])
 
+  // Close expanded card when clicking outside
+  useEffect(() => {
+    if (!isExpanded) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        onToggle()
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isExpanded, onToggle])
+
   return (
     <motion.div
       ref={cardRef}
@@ -377,27 +389,38 @@ function TimelineEventCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      onClick={() => {
+    >
+      <div className="event-dot" onClick={() => {
         trackEvent(isExpanded ? 'collapse_event' : 'expand_event', {
           event_type: event.type,
           event_id: event.id,
           event_summary: event.summary
         })
         onToggle()
-      }}
-    >
-      <div className="event-dot" />
+      }} />
       <div className="event-content">
-        <div className="event-summary">{event.summary}</div>
-        <div className="event-date">{formatDate(event.date)}</div>
-        <div className="event-meta">
-          <span className="event-type">
-            {event.type === 'pr' ? `PR #${event.prNumber}` : `${event.sha}`}
-          </span>
-          <span className="event-lines">
-            <span className="stat-add">+{event.additions.toLocaleString()}</span>
-            <span className="stat-del">-{event.deletions.toLocaleString()}</span>
-          </span>
+        <div
+          className="event-header"
+          onClick={() => {
+            trackEvent(isExpanded ? 'collapse_event' : 'expand_event', {
+              event_type: event.type,
+              event_id: event.id,
+              event_summary: event.summary
+            })
+            onToggle()
+          }}
+        >
+          <div className="event-summary">{event.summary}</div>
+          <div className="event-date">{formatDate(event.date)}</div>
+          <div className="event-meta">
+            <span className="event-type">
+              {event.type === 'pr' ? `PR #${event.prNumber}` : `${event.sha}`}
+            </span>
+            <span className="event-lines">
+              <span className="stat-add">+{event.additions.toLocaleString()}</span>
+              <span className="stat-del">-{event.deletions.toLocaleString()}</span>
+            </span>
+          </div>
         </div>
 
         <AnimatePresence>

@@ -36,7 +36,7 @@ export default async function handler(request) {
 
     if (!process.env.ANTHROPIC_API_KEY) {
       return new Response(JSON.stringify({
-        summary: description || title || 'No summary available.',
+        summary: 'AI summarization not configured. Add an ANTHROPIC_API_KEY to enable.',
         error: 'AI summarization not configured'
       }), {
         status: 200,
@@ -48,7 +48,7 @@ export default async function handler(request) {
       apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    const prompt = `You are summarizing a ${type === 'pr' ? 'pull request' : 'commit'} for a developer.
+    const prompt = `You are a senior code reviewer summarizing a ${type === 'pr' ? 'pull request' : 'commit'} for a team lead who needs to quickly understand what changed.
 
 Title: ${title}
 Description: ${description || 'No description provided'}
@@ -56,10 +56,10 @@ Lines added: ${additions}
 Lines deleted: ${deletions}
 ${files ? `Files changed: ${files.join(', ')}` : ''}
 
-Write a clear, concise 2-3 sentence summary explaining what this change does in plain English. Focus on the "what" and "why", not implementation details. Write in present tense.`;
+Write a 1-2 sentence summary. Be direct and specific — state what was changed and why in plain English. No filler, no restating the title, no implementation details like file names or function signatures. Use present tense. Do not start with "This commit" or "This PR".`;
 
     const message = await client.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
       messages: [
         { role: 'user', content: prompt }

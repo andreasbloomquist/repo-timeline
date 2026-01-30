@@ -784,6 +784,9 @@
   position: relative;
   display: flex;
   align-items: flex-start;
+}
+
+.event-header {
   cursor: pointer;
 }
 
@@ -814,6 +817,7 @@
   transform: translateX(-50%);
   transition: all 0.3s var(--ease-out-expo);
   z-index: 10;
+  cursor: pointer;
 }
 
 .event:hover .event-dot,
