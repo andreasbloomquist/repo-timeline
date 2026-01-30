@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import ReactMarkdown from 'react-markdown'
 import './App.css'
@@ -267,6 +267,7 @@ function TimelineEventCard({
   onToggle: () => void
 }) {
   const side = index % 2 === 0 ? 'left' : 'right'
+  const cardRef = useRef<HTMLDivElement>(null)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [showFullMessage, setShowFullMessage] = useState(false)
@@ -284,6 +285,7 @@ function TimelineEventCard({
 
   return (
     <motion.div
+      ref={cardRef}
       className={`event ${side} ${isExpanded ? 'expanded' : ''}`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -319,6 +321,15 @@ function TimelineEventCard({
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              onAnimationComplete={() => {
+                if (isExpanded && cardRef.current) {
+                  const rect = cardRef.current.getBoundingClientRect()
+                  const viewportHeight = window.innerHeight
+                  if (rect.top < 0 || rect.bottom > viewportHeight) {
+                    cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }
+                }
+              }}
             >
               <div className="event-details-inner">
                 <div className="ai-summary-section">
@@ -639,6 +650,7 @@ function App() {
       </main>
 
       <NavArrows show={!!user && events.length > 0 && !loadingTimeline} />
+      <a href="/privacy.html" className="privacy-link">Privacy</a>
     </div>
   )
 }

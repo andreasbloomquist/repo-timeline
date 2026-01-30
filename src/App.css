@@ -719,34 +719,30 @@
 }
 
 .nav-arrow {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--white);
-  border: 1px solid var(--gray-light);
-  border-radius: 50%;
+  background: none;
+  border: none;
+  color: var(--gray-light);
   cursor: pointer;
   pointer-events: auto;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .nav-arrow:hover {
-  background: var(--black);
-  border-color: var(--black);
-  color: var(--white);
+  color: var(--black);
 }
 
 .nav-arrow:disabled {
-  opacity: 0.3;
+  opacity: 0.2;
   cursor: not-allowed;
 }
 
 .nav-arrow:disabled:hover {
-  background: var(--white);
-  border-color: var(--gray-light);
-  color: var(--black);
+  color: var(--gray-light);
 }
 
 .nav-arrow svg {
