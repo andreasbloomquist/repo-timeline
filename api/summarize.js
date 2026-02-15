@@ -3,6 +3,54 @@ import { verifyToken, getTokenFromCookies } from './lib/auth.js';
 
 export const config = { runtime: 'edge' };
 
+function getAIConfig() {
+  const provider = (process.env.AI_PROVIDER || 'anthropic').toLowerCase();
+  const defaults = {
+    anthropic: { model: 'claude-haiku-4-5-20251001', key: process.env.ANTHROPIC_API_KEY },
+    openai: { model: 'gpt-4o-mini', key: process.env.OPENAI_API_KEY },
+    google: { model: 'gemini-2.0-flash', key: process.env.GOOGLE_AI_API_KEY }
+  };
+  const config = defaults[provider] || defaults.anthropic;
+  return { provider, model: process.env.AI_MODEL || config.model, apiKey: config.key };
+}
+
+async function callAI(prompt, provider, model, apiKey) {
+  if (provider === 'anthropic') {
+    const client = new Anthropic({ apiKey });
+    const message = await client.messages.create({
+      model,
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    return message.content[0].type === 'text' ? message.content[0].text : null;
+  }
+
+  if (provider === 'openai') {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  }
+
+  if (provider === 'google') {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 200 } })
+      }
+    );
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  }
+
+  return null;
+}
+
 export default async function handler(request) {
   // Only allow POST
   if (request.method !== 'POST') {
@@ -34,19 +82,17 @@ export default async function handler(request) {
     const body = await request.json();
     const { type, title, description, additions, deletions, owner, repo, prNumber, sha } = body;
 
-    if (!process.env.ANTHROPIC_API_KEY) {
+    const { provider, model, apiKey } = getAIConfig();
+
+    if (!apiKey) {
       return new Response(JSON.stringify({
-        summary: 'AI summarization not configured. Add an ANTHROPIC_API_KEY to enable.',
+        summary: 'AI summarization not configured. Set AI_PROVIDER and the corresponding API key.',
         error: 'AI summarization not configured'
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
     }
-
-    const client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY
-    });
 
     // Fetch the diff from GitHub
     const ghHeaders = {
@@ -104,19 +150,9 @@ ${truncatedDiff ? `Code diff:\n\`\`\`\n${truncatedDiff}\n\`\`\`` : ''}
 
 Write a 1-2 sentence summary based on the actual code changes, the title, and the description. Be direct and specific — state what was changed and why in plain English. No filler, no restating the title, no implementation details like file names or function signatures. Use present tense. Do not start with "This commit" or "This PR".`;
 
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      messages: [
-        { role: 'user', content: prompt }
-      ]
-    });
+    const summary = await callAI(prompt, provider, model, apiKey);
 
-    const summary = message.content[0].type === 'text'
-      ? message.content[0].text
-      : 'Unable to generate summary.';
-
-    return new Response(JSON.stringify({ summary }), {
+    return new Response(JSON.stringify({ summary: summary || 'Unable to generate summary.' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });

@@ -297,6 +297,59 @@ app.get('/api/repos/:owner/:repo/timeline', async (req, res) => {
   }
 });
 
+// AI provider configuration
+function getAIConfig() {
+  const provider = (process.env.AI_PROVIDER || 'anthropic').toLowerCase();
+  const defaults = {
+    anthropic: { model: 'claude-haiku-4-5-20251001', key: process.env.ANTHROPIC_API_KEY },
+    openai: { model: 'gpt-4o-mini', key: process.env.OPENAI_API_KEY },
+    google: { model: 'gemini-2.0-flash', key: process.env.GOOGLE_AI_API_KEY }
+  };
+  const config = defaults[provider] || defaults.anthropic;
+  return { provider, model: process.env.AI_MODEL || config.model, apiKey: config.key };
+}
+
+async function callAI(prompt) {
+  const { provider, model, apiKey } = getAIConfig();
+  if (!apiKey) return null;
+
+  if (provider === 'anthropic') {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey });
+    const message = await client.messages.create({
+      model,
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    return message.content[0].type === 'text' ? message.content[0].text : null;
+  }
+
+  if (provider === 'openai') {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  }
+
+  if (provider === 'google') {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 200 } })
+      }
+    );
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  }
+
+  return null;
+}
+
 // AI Summarize endpoint
 app.post('/api/summarize', async (req, res) => {
   if (!req.session.accessToken) {
@@ -305,19 +358,15 @@ app.post('/api/summarize', async (req, res) => {
 
   const { type, title, description, additions, deletions, owner, repo, prNumber, sha } = req.body;
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const { apiKey } = getAIConfig();
+  if (!apiKey) {
     return res.json({
-      summary: 'AI summarization not configured. Add an ANTHROPIC_API_KEY to enable.',
+      summary: 'AI summarization not configured. Set AI_PROVIDER and the corresponding API key in your .env file.',
       error: 'AI summarization not configured'
     });
   }
 
   try {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk');
-    const client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY
-    });
-
     // Fetch the diff from GitHub
     const octokit = new Octokit({ auth: req.session.accessToken });
     let diff = '';
@@ -329,7 +378,6 @@ app.post('/api/summarize', async (req, res) => {
           owner, repo, pull_number: prNumber, per_page: 50
         });
         filesChanged = prFiles.map(f => f.filename);
-        // Include patches (truncated to keep prompt reasonable)
         diff = prFiles
           .filter(f => f.patch)
           .map(f => `--- ${f.filename}\n${f.patch}`)
@@ -366,19 +414,8 @@ ${truncatedDiff ? `Code diff:\n\`\`\`\n${truncatedDiff}\n\`\`\`` : ''}
 
 Write a 1-2 sentence summary based on the actual code changes, the title, and the description. Be direct and specific — state what was changed and why in plain English. No filler, no restating the title, no implementation details like file names or function signatures. Use present tense. Do not start with "This commit" or "This PR".`;
 
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      messages: [
-        { role: 'user', content: prompt }
-      ]
-    });
-
-    const summary = message.content[0].type === 'text'
-      ? message.content[0].text
-      : 'Unable to generate summary.';
-
-    res.json({ summary });
+    const summary = await callAI(prompt);
+    res.json({ summary: summary || 'Unable to generate summary.' });
   } catch (error) {
     console.error('Summarize error:', error);
     res.json({
@@ -420,5 +457,11 @@ app.listen(PORT, () => {
     console.log('');
   } else {
     console.log('✓ GitHub OAuth configured');
+  }
+  const { provider, model, apiKey } = getAIConfig();
+  if (apiKey) {
+    console.log(`✓ AI summaries enabled (${provider} / ${model})`);
+  } else {
+    console.log('⚠️  No AI API key configured — summaries disabled');
   }
 });

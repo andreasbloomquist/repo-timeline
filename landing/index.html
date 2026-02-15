@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Repo Timeline — Visualize GitHub Repository Changes in Plain English</title>
+  <meta name="description" content="Repo Timeline turns your GitHub commit history into a visual timeline with AI-powered summaries. Understand what changed and why, without reading diffs.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='12' fill='%23000'/><line x1='50' y1='15' x2='50' y2='85' stroke='%23fff' stroke-width='3'/><circle cx='50' cy='30' r='6' fill='%23fff'/><circle cx='50' cy='55' r='6' fill='%23fff'/><circle cx='50' cy='80' r='6' fill='%23fff'/></svg>">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Repo Timeline — Visualize GitHub Repository Changes">
+  <meta property="og:description" content="Turn your GitHub commit history into a visual timeline with AI-powered summaries. Understand what changed and why, without reading diffs.">
+  <meta property="og:site_name" content="Repo Timeline">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Repo Timeline — Visualize GitHub Repository Changes">
+  <meta name="twitter:description" content="Turn your GitHub commit history into a visual timeline with AI-powered summaries.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --black: #000;
+      --white: #fff;
+      --gray: #888;
+      --gray-light: #e5e5e5;
+      --gray-lighter: #f5f5f5;
+      --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      --font-system: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    html {
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-system);
+      background: var(--white);
+      color: var(--black);
+      line-height: 1.5;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    ::selection { background: var(--black); color: var(--white); }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeRight {
+      from { opacity: 0; transform: translateX(30px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .anim-fade-up {
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease-out-expo) forwards;
+    }
+    .anim-fade-right {
+      opacity: 0;
+      animation: fadeRight 1s var(--ease-out-expo) forwards;
+    }
+    .anim-delay-1 { animation-delay: 0.2s; }
+    .anim-delay-2 { animation-delay: 0.3s; }
+    .anim-delay-3 { animation-delay: 0.6s; }
+    .anim-delay-4 { animation-delay: 0.72s; }
+    .anim-delay-5 { animation-delay: 0.84s; }
+    .anim-delay-6 { animation-delay: 0.96s; }
+    .anim-delay-7 { animation-delay: 1.08s; }
+    .anim-delay-8 { animation-delay: 0.8s; }
+
+    /* ── Page layout ── */
+    .page {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      background: var(--white);
+    }
+
+    /* ── Hero ── */
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+      max-width: 1100px;
+      width: 100%;
+      min-height: 100vh;
+      padding: 80px 48px;
+    }
+
+    .hero-text {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--gray);
+      margin-bottom: 20px;
+      position: relative;
+      padding-left: 20px;
+    }
+
+    .label::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 12px;
+      height: 1.5px;
+      background: var(--black);
+      transform: translateY(-50%);
+    }
+
+    .headline {
+      font-family: var(--font-system);
+      font-size: clamp(32px, 4vw, 48px);
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      color: var(--black);
+      margin-bottom: 20px;
+    }
+
+    .headline em {
+      font-style: italic;
+      color: var(--gray);
+    }
+
+    .subhead {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--gray);
+      max-width: 380px;
+      margin-bottom: 36px;
+    }
+
+    .cta-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      padding: 16px 32px;
+      background: var(--black);
+      color: var(--white);
+      border-radius: 8px;
+      transition: box-shadow 0.3s var(--ease-out-expo);
+      text-decoration: none;
+    }
+
+    .cta-button:hover {
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    }
+
+    .cta-button svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .cta-secondary {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: var(--gray);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .cta-secondary:hover {
+      color: var(--black);
+    }
+
+    .note {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--gray);
+      margin-top: 16px;
+    }
+
+    /* ── Demo ── */
+    .demo {
+      display: flex;
+      justify-content: center;
+    }
+
+    .demo-window {
+      width: 100%;
+      max-width: 380px;
+      background: var(--white);
+      border: 1px solid var(--gray-light);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .demo-bar {
+      display: flex;
+      gap: 6px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--gray-light);
+    }
+
+    .demo-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--gray-light);
+    }
+
+    .demo-content {
+      position: relative;
+      padding: 24px 16px 16px;
+    }
+
+    .demo-spine {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1.5px;
+      background: var(--gray-light);
+      transform: translateX(-50%);
+    }
+
+    .demo-event {
+      position: relative;
+      display: flex;
+      align-items: center;
+      margin-bottom: 14px;
+      cursor: pointer;
+      opacity: 0;
+      animation: fadeUp 0.6s var(--ease-out-expo) forwards;
+    }
+
+    .demo-event.left {
+      justify-content: flex-start;
+      padding-right: calc(50% + 12px);
+      flex-direction: row-reverse;
+    }
+
+    .demo-event.right {
+      justify-content: flex-end;
+      padding-left: calc(50% + 12px);
+    }
+
+    .demo-node {
+      position: absolute;
+      left: 50%;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gray);
+      transform: translateX(-50%);
+      z-index: 1;
+      transition: all 0.2s ease;
+    }
+
+    .demo-event:hover .demo-node,
+    .demo-event.expanded .demo-node {
+      background: var(--black);
+      transform: translateX(-50%) scale(1.3);
+    }
+
+    .demo-card {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 10px;
+      background: var(--gray-lighter);
+      border-radius: 6px;
+      max-width: 160px;
+      transition: background 0.15s ease;
+    }
+
+    .demo-event:hover .demo-card {
+      background: var(--gray-light);
+    }
+
+    .demo-card-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--black);
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+
+    .demo-card-date {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      letter-spacing: 0.02em;
+      color: var(--gray);
+      text-transform: uppercase;
+    }
+
+    .demo-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .demo-card-type {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+
+    .demo-card-lines {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      display: flex;
+      gap: 4px;
+    }
+
+    .stat-add { color: #22863a; }
+    .stat-del { color: #cb2431; }
+
+    .demo-card-details {
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.3s var(--ease-out-expo), opacity 0.25s ease, margin-top 0.3s ease;
+      margin-top: 0;
+    }
+
+    .demo-event.expanded .demo-card-details {
+      max-height: 200px;
+      opacity: 1;
+      margin-top: 6px;
+    }
+
+    .demo-card-summary {
+      padding-top: 6px;
+      border-top: 1px solid var(--gray-light);
+    }
+
+    .demo-card-summary-label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 7px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gray);
+      margin-bottom: 3px;
+    }
+
+    .demo-card-summary p {
+      font-size: 9px;
+      line-height: 1.5;
+      color: var(--black);
+      margin: 0;
+    }
+
+    /* ── Features ── */
+    .features {
+      width: 100%;
+      max-width: 1100px;
+      padding: 0 48px 80px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      padding-top: 64px;
+      border-top: 1px solid var(--gray-light);
+    }
+
+    .feature-icon {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      color: var(--black);
+    }
+
+    .feature-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .feature h3 {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--black);
+      margin-bottom: 8px;
+    }
+
+    .feature p {
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--gray);
+    }
+
+    /* ── Setup ── */
+    .setup {
+      width: 100%;
+      max-width: 1100px;
+      padding: 0 48px 80px;
+    }
+
+    .setup-inner {
+      padding-top: 64px;
+      border-top: 1px solid var(--gray-light);
+    }
+
+    .setup h2 {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--black);
+      margin-bottom: 40px;
+    }
+
+    .setup-steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      margin-bottom: 40px;
+    }
+
+    .setup-step {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .step-number {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+
+    .step-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--black);
+      letter-spacing: -0.01em;
+    }
+
+    .step-desc {
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--gray);
+    }
+
+    .step-desc code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--gray-lighter);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .setup-link {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: var(--black);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      transition: color 0.15s ease;
+    }
+
+    .setup-link:hover {
+      color: var(--gray);
+    }
+
+    /* ── FAQ ── */
+    .faq {
+      max-width: 560px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 48px 48px 80px;
+      text-align: left;
+    }
+
+    .faq details {
+      border-bottom: 1px solid var(--gray-light);
+    }
+
+    .faq details:last-child {
+      border-bottom: none;
+    }
+
+    .faq summary {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--black);
+      padding: 16px 0;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: color 0.15s ease;
+    }
+
+    .faq summary::-webkit-details-marker { display: none; }
+
+    .faq summary::after {
+      content: '+';
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--gray);
+      transition: transform 0.2s ease;
+    }
+
+    .faq details[open] summary::after {
+      content: '\2212';
+    }
+
+    .faq summary:hover {
+      color: var(--gray);
+    }
+
+    .faq p {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--gray);
+      margin: 0 0 16px;
+    }
+
+    .faq ul {
+      margin: 0 0 16px;
+      padding-left: 20px;
+    }
+
+    .faq li {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--gray);
+      margin-bottom: 4px;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--gray);
+      padding: 0 48px 32px;
+      text-align: center;
+      width: 100%;
+    }
+
+    .footer a {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color 0.15s ease;
+    }
+
+    .footer a:hover {
+      color: var(--black);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 48px;
+        padding: 64px 24px;
+        min-height: auto;
+      }
+
+      .hero-text {
+        align-items: center;
+        text-align: center;
+      }
+
+      .cta-group {
+        align-items: center;
+      }
+
+      .label { padding-left: 0; }
+      .label::before { display: none; }
+      .subhead { max-width: 100%; }
+      .demo-window { max-width: 320px; }
+
+      .features { padding: 0 24px 64px; }
+      .features-grid { grid-template-columns: 1fr; gap: 32px; }
+
+      .setup { padding: 0 24px 64px; }
+      .setup-steps { grid-template-columns: 1fr; gap: 24px; }
+
+      .faq { padding: 48px 24px 64px; }
+      .footer { padding: 0 24px 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-text anim-fade-up">
+        <span class="label">Repo Timeline</span>
+        <h1 class="headline">
+          Your commit history,<br>
+          <em>in plain English.</em>
+        </h1>
+        <p class="subhead">
+          See merged PRs and major commits on a visual timeline with AI&#8209;powered summaries. Built for the era of vibe coding.
+        </p>
+        <div class="cta-group anim-fade-up anim-delay-2">
+          <a class="cta-button" href="https://github.com/andreasbloomquist/repo-timeline" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            View on GitHub
+          </a>
+          <a class="cta-secondary" href="#setup">Self-host in minutes &rarr;</a>
+        </div>
+        <p class="note">Free &middot; Open source &middot; MIT license</p>
+      </div>
+
+      <div class="demo anim-fade-right anim-delay-1">
+        <div class="demo-window">
+          <div class="demo-bar">
+            <span class="demo-dot"></span>
+            <span class="demo-dot"></span>
+            <span class="demo-dot"></span>
+          </div>
+          <div class="demo-content">
+            <div class="demo-spine"></div>
+
+            <div class="demo-event left anim-delay-3" onclick="toggleEvent(this)">
+              <div class="demo-node"></div>
+              <div class="demo-card">
+                <span class="demo-card-label">Refactor auth flow</span>
+                <span class="demo-card-date">2 hours ago</span>
+                <div class="demo-card-meta">
+                  <span class="demo-card-type">PR #47</span>
+                  <span class="demo-card-lines">
+                    <span class="stat-add">+342</span>
+                    <span class="stat-del">-89</span>
+                  </span>
+                </div>
+                <div class="demo-card-details">
+                  <div class="demo-card-summary">
+                    <span class="demo-card-summary-label">AI Summary</span>
+                    <p>Replaced the legacy session-based auth with a JWT token flow. Moved token refresh logic into a shared middleware and removed three deprecated endpoints.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo-event right anim-delay-4" onclick="toggleEvent(this)">
+              <div class="demo-node"></div>
+              <div class="demo-card">
+                <span class="demo-card-label">Add dark mode support</span>
+                <span class="demo-card-date">Yesterday</span>
+                <div class="demo-card-meta">
+                  <span class="demo-card-type">PR #44</span>
+                  <span class="demo-card-lines">
+                    <span class="stat-add">+1,204</span>
+                    <span class="stat-del">-67</span>
+                  </span>
+                </div>
+                <div class="demo-card-details">
+                  <div class="demo-card-summary">
+                    <span class="demo-card-summary-label">AI Summary</span>
+                    <p>Introduced a theme provider with system-preference detection and manual toggle. All color values moved to CSS custom properties with light and dark variants.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo-event left anim-delay-5" onclick="toggleEvent(this)">
+              <div class="demo-node"></div>
+              <div class="demo-card">
+                <span class="demo-card-label">Fix memory leak in worker</span>
+                <span class="demo-card-date">4 days ago</span>
+                <div class="demo-card-meta">
+                  <span class="demo-card-type">a3f8c21</span>
+                  <span class="demo-card-lines">
+                    <span class="stat-add">+118</span>
+                    <span class="stat-del">-45</span>
+                  </span>
+                </div>
+                <div class="demo-card-details">
+                  <div class="demo-card-summary">
+                    <span class="demo-card-summary-label">AI Summary</span>
+                    <p>The background sync worker was holding references to completed promises, causing memory to grow over time. Added cleanup on task completion.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo-event right anim-delay-6" onclick="toggleEvent(this)">
+              <div class="demo-node"></div>
+              <div class="demo-card">
+                <span class="demo-card-label">Migrate to Edge Runtime</span>
+                <span class="demo-card-date">12 days ago</span>
+                <div class="demo-card-meta">
+                  <span class="demo-card-type">PR #38</span>
+                  <span class="demo-card-lines">
+                    <span class="stat-add">+890</span>
+                    <span class="stat-del">-1,102</span>
+                  </span>
+                </div>
+                <div class="demo-card-details">
+                  <div class="demo-card-summary">
+                    <span class="demo-card-summary-label">AI Summary</span>
+                    <p>Converted all API routes from Node.js serverless functions to Vercel Edge Runtime. Replaced incompatible Node APIs with web-standard equivalents.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo-event left anim-delay-7" onclick="toggleEvent(this)">
+              <div class="demo-node"></div>
+              <div class="demo-card">
+                <span class="demo-card-label">Update API rate limiting</span>
+                <span class="demo-card-date">30 days ago</span>
+                <div class="demo-card-meta">
+                  <span class="demo-card-type">e7b2d09</span>
+                  <span class="demo-card-lines">
+                    <span class="stat-add">+156</span>
+                    <span class="stat-del">-23</span>
+                  </span>
+                </div>
+                <div class="demo-card-details">
+                  <div class="demo-card-summary">
+                    <span class="demo-card-summary-label">AI Summary</span>
+                    <p>Switched from fixed-window to sliding-window rate limiting. Added per-user limits alongside the global limit and improved the 429 response with retry-after headers.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <section class="features" aria-label="Features">
+      <div class="features-grid anim-fade-up anim-delay-8">
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="6" r="2"/><circle cx="12" cy="18" r="2"/></svg>
+          </div>
+          <h3>Visual Timeline</h3>
+          <p>Merged PRs and large commits displayed chronologically on a vertical timeline.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>AI Summaries</h3>
+          <p>Each change explained in plain English. Bring your own provider &mdash; supports Anthropic Claude, OpenAI, and Google Gemini.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+          </div>
+          <h3>Any Repo, Any Branch</h3>
+          <p>Works with public and private repositories. Switch between branches to explore different histories.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Setup -->
+    <section class="setup" id="setup" aria-label="Setup">
+      <div class="setup-inner">
+        <h2>Get started</h2>
+        <div class="setup-steps">
+          <div class="setup-step">
+            <span class="step-number">Step 1</span>
+            <span class="step-title">Create a GitHub OAuth App</span>
+            <p class="step-desc">Register a new OAuth application in your GitHub Developer Settings. Set the callback URL to <code>http://localhost:3001/api/auth/callback</code>.</p>
+          </div>
+          <div class="setup-step">
+            <span class="step-number">Step 2</span>
+            <span class="step-title">Clone &amp; configure</span>
+            <p class="step-desc">Clone the repo, copy <code>.env.example</code> to <code>.env</code>, and add your GitHub OAuth credentials and an AI API key.</p>
+          </div>
+          <div class="setup-step">
+            <span class="step-number">Step 3</span>
+            <span class="step-title">Install &amp; run</span>
+            <p class="step-desc">Run <code>npm install</code> then <code>npm start</code>. Open <code>localhost:5173</code>, sign in with GitHub, and pick a repo.</p>
+          </div>
+        </div>
+        <a class="setup-link" href="https://github.com/andreasbloomquist/repo-timeline#quick-start" target="_blank" rel="noopener">Full setup instructions in the README &rarr;</a>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq" aria-label="FAQ">
+      <details>
+        <summary>What is Repo Timeline?</summary>
+        <p>Repo Timeline is a free, open-source developer tool that turns your GitHub commit history into a visual timeline. It shows merged pull requests and commits with significant line changes, displayed on a vertical timeline with AI-generated summaries that explain each change in plain English. Built for the era of vibe coding, where AI-assisted development produces rapid, large-scale code changes that are difficult to track through traditional commit logs.</p>
+      </details>
+
+      <details>
+        <summary>How does it work?</summary>
+        <p>Sign in with your GitHub account, select a repository and branch, and Repo Timeline fetches your merged PRs and major commits from the GitHub API. Each change is displayed as a dot on a vertical timeline. Click any dot to expand it and see an AI-powered summary that describes what changed and why in plain, non-technical language. You can toggle AI summaries on or off at any time.</p>
+      </details>
+
+      <details>
+        <summary>Who is it for?</summary>
+        <p>Repo Timeline is built for developers, engineering managers, and anyone who needs to understand the history of a codebase without reading diffs. It is especially useful for teams using AI coding assistants like Cursor, GitHub Copilot, or Claude Code, where codebases evolve quickly with large file changes that are hard to follow through conventional git logs.</p>
+      </details>
+
+      <details>
+        <summary>What AI providers are supported?</summary>
+        <p>Repo Timeline supports three AI providers for generating summaries: Anthropic Claude, OpenAI, and Google Gemini. Set the <code style="font-family:var(--font-mono);font-size:11px;background:var(--gray-lighter);padding:2px 6px;border-radius:3px;">AI_PROVIDER</code> environment variable and add the corresponding API key. Each provider has a sensible default model, and you can override it with <code style="font-family:var(--font-mono);font-size:11px;background:var(--gray-lighter);padding:2px 6px;border-radius:3px;">AI_MODEL</code>. The app works without any AI key configured &mdash; you just won't see generated summaries.</p>
+      </details>
+    </section>
+
+    <footer class="footer">
+      <a href="https://github.com/andreasbloomquist/repo-timeline" target="_blank" rel="noopener">GitHub</a>
+      &nbsp;&middot;&nbsp; MIT License
+    </footer>
+
+  </div>
+
+  <script>
+    function toggleEvent(el) {
+      const wasExpanded = el.classList.contains('expanded');
+      document.querySelectorAll('.demo-event.expanded').forEach(e => e.classList.remove('expanded'));
+      if (!wasExpanded) el.classList.add('expanded');
+    }
+  </script>
+</body>
+</html>
