@@ -2,9 +2,17 @@
 
 A visual timeline of meaningful changes in a GitHub repository, explained in plain English.
 
+<p align="center">
+  <img src="docs/signin.png" alt="Repo Timeline sign-in page" width="720" />
+</p>
+
 In the era of vibe coding, codebases change fast. A single session with an AI coding assistant can produce dozens of commits and PRs with thousands of lines changed. Traditional commit logs become noise.
 
 Repo Timeline cuts through that noise. It pulls the changes that actually matter -- merged PRs and large commits -- plots them on a clean vertical timeline, and uses AI to summarize what each change did in plain language. Instead of reading diffs, you read sentences.
+
+<p align="center">
+  <img src="docs/demo.gif" alt="Repo Timeline product demo" width="720" />
+</p>
 
 ## Who it's for
 
@@ -22,7 +30,9 @@ Repo Timeline cuts through that noise. It pulls the changes that actually matter
 - **Direct links** back to the original PR or commit on GitHub
 - **GitHub OAuth** -- no passwords stored, no data persisted
 
-## Quick start
+## Running locally
+
+Follow these steps to run Repo Timeline on your own machine.
 
 ### 1. Create a GitHub OAuth App
 
@@ -76,7 +86,7 @@ This starts both the Vite dev server (`:5173`) and the Express backend (`:3001`)
 
 ## Deploying to Vercel
 
-The `api/` directory contains Edge Functions that replace the Express server in production.
+To deploy Repo Timeline to production, you can host it on Vercel. The `api/` directory contains Edge Functions that replace the Express server in production.
 
 1. Push to GitHub and import the repo in [Vercel](https://vercel.com)
 2. Add environment variables in your Vercel project settings:
