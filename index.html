@@ -6,6 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
 
+    <!-- No-flash theme boot — runs before any CSS so the page paints in the correct theme -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('repo-timeline-theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
+
     <!-- SEO Meta Tags -->
     <title>Repo Timeline — Visualize GitHub Repository Changes in Plain English</title>
     <meta name="description" content="Repo Timeline turns your GitHub commit history into a visual timeline with AI-powered summaries. Understand what changed and why, without reading diffs." />

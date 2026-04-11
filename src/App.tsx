@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import ReactMarkdown from 'react-markdown'
 import './App.css'
+import { ThemeToggle } from './ThemeToggle'
 
 // Use relative URLs - works in both dev (with proxy) and production
 const API_URL = ''
@@ -917,6 +918,7 @@ function App() {
   if (loading) {
     return (
       <div className="app">
+        <ThemeToggle />
         <Header
           user={null}
           repos={[]}
@@ -942,6 +944,7 @@ function App() {
 
   return (
     <div className="app">
+      <ThemeToggle />
       {user && (
         <Header
           user={user}
