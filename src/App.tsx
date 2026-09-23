@@ -7,15 +7,6 @@ import { ThemeToggle } from './ThemeToggle'
 // Use relative URLs - works in both dev (with proxy) and production
 const API_URL = ''
 
-// Analytics
-declare global {
-  interface Window { gtag?: (...args: unknown[]) => void }
-}
-
-function trackEvent(action: string, params?: Record<string, string | number | boolean>) {
-  window.gtag?.('event', action, params)
-}
-
 // Types
 interface TimelineEvent {
   id: string
@@ -225,24 +216,20 @@ function UserMenu({ user, minLines, onMinLinesChange, onLogout }: { user: User; 
                 max={500}
                 step={50}
                 value={minLines}
-                onChange={(e) => {
-                  const val = Number(e.target.value)
-                  trackEvent('change_min_lines', { min_lines: val })
-                  onMinLinesChange(val)
-                }}
+                onChange={(e) => onMinLinesChange(Number(e.target.value))}
               />
             </div>
             <div className="user-menu-divider" />
             <a
               href={`${API_URL}/api/auth/permissions`}
               className="user-menu-item"
-              onClick={() => { trackEvent('click_manage_permissions'); setOpen(false) }}
+              onClick={() => setOpen(false)}
             >
               Manage permissions
             </a>
             <button
               className="user-menu-item"
-              onClick={() => { trackEvent('click_sign_out'); onLogout(); setOpen(false) }}
+              onClick={() => { onLogout(); setOpen(false) }}
             >
               Sign out
             </button>
@@ -281,7 +268,6 @@ function Header({
   onLogout: () => void
 }) {
   const handleLogin = () => {
-    trackEvent('click_login')
     window.location.href = `${API_URL}/api/auth/github`
   }
 
@@ -290,7 +276,7 @@ function Header({
       <div className="header-left">
         <span className="logo">Timeline</span>
         {user && (
-          <div className="ai-toggle" onClick={() => { trackEvent('toggle_ai_summary', { enabled: !aiEnabled }); onToggleAI() }}>
+          <div className="ai-toggle" onClick={onToggleAI}>
             <div className={`toggle-track ${aiEnabled ? 'on' : 'off'}`}>
               <div className="toggle-thumb" />
             </div>
@@ -304,10 +290,7 @@ function Header({
                 value={selectedRepo.id}
                 onChange={(e) => {
                   const repo = repos.find(r => r.id === Number(e.target.value))
-                  if (repo) {
-                    trackEvent('select_repo', { repo_name: repo.fullName })
-                    onRepoChange(repo)
-                  }
+                  if (repo) onRepoChange(repo)
                 }}
               >
                 {repos.map(repo => (
@@ -321,7 +304,7 @@ function Header({
             <div className="selector">
               <select
                 value={selectedBranch}
-                onChange={(e) => { trackEvent('select_branch', { branch: e.target.value }); onBranchChange(e.target.value) }}
+                onChange={(e) => onBranchChange(e.target.value)}
               >
                 {branches.map(branch => (
                   <option key={branch} value={branch}>{branch}</option>
@@ -398,25 +381,11 @@ function TimelineEventCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="event-dot" onClick={() => {
-        trackEvent(isExpanded ? 'collapse_event' : 'expand_event', {
-          event_type: event.type,
-          event_id: event.id,
-          event_summary: event.summary
-        })
-        onToggle()
-      }} />
+      <div className="event-dot" onClick={onToggle} />
       <div className="event-content">
         <div
           className="event-header"
-          onClick={() => {
-            trackEvent(isExpanded ? 'collapse_event' : 'expand_event', {
-              event_type: event.type,
-              event_id: event.id,
-              event_summary: event.summary
-            })
-            onToggle()
-          }}
+          onClick={onToggle}
         >
           <div className="event-summary">{event.summary}</div>
           <div className="event-date">{formatDate(event.date)}</div>
@@ -490,7 +459,6 @@ function TimelineEventCard({
                         className="expand-message-btn"
                         onClick={(e) => {
                           e.stopPropagation()
-                          trackEvent(showFullMessage ? 'collapse_message' : 'expand_message', { event_id: event.id })
                           setShowFullMessage(!showFullMessage)
                         }}
                       >
@@ -513,7 +481,7 @@ function TimelineEventCard({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="event-link"
-                    onClick={(e) => { e.stopPropagation(); trackEvent('click_view_on_github', { event_type: event.type, event_id: event.id }) }}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     View on GitHub
                     <ExternalIcon />
@@ -637,12 +605,10 @@ function NavArrows({ show }: { show: boolean }) {
   if (!show) return null
 
   const scrollUp = () => {
-    trackEvent('click_nav_arrow', { direction: 'up' })
     window.scrollBy({ top: -window.innerHeight * 0.8, behavior: 'smooth' })
   }
 
   const scrollDown = () => {
-    trackEvent('click_nav_arrow', { direction: 'down' })
     window.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' })
   }
 
@@ -660,7 +626,6 @@ function NavArrows({ show }: { show: boolean }) {
 
 function LoginScreen() {
   const handleLogin = () => {
-    trackEvent('click_login')
     window.location.href = `${API_URL}/api/auth/github`
   }
 
@@ -971,7 +936,6 @@ function App() {
       </main>
 
       <NavArrows show={!!user && events.length > 0 && !loadingTimeline} />
-      <a href="/privacy.html" className="privacy-link">Privacy</a>
     </div>
   )
 }

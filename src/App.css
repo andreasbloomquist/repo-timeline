@@ -1259,24 +1259,6 @@
   color: var(--gray);
 }
 
-/* Privacy link */
-.privacy-link {
-  position: fixed;
-  bottom: 16px;
-  right: 20px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  color: var(--gray);
-  opacity: 0.4;
-  transition: opacity 0.15s ease;
-  z-index: 50;
-}
-
-.privacy-link:hover {
-  opacity: 1;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .header {
