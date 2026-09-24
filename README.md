@@ -27,12 +27,15 @@ Repo Timeline cuts through that noise. It pulls the changes that actually matter
 - **Any repo, any branch** -- works with public and private repositories you have access to
 - **Configurable AI provider** -- bring your own: Anthropic Claude, OpenAI, or Google Gemini
 - **Adjustable diff threshold** -- filter by minimum line changes (default 100)
+- **Date range filter** -- presets (7D / 30D / 90D / 1Y) or pick any range on the calendar
 - **Direct links** back to the original PR or commit on GitHub
 - **GitHub OAuth** -- no passwords stored, no data persisted
 
 ## Running locally
 
 Follow these steps to run Repo Timeline on your own machine.
+
+**Prerequisites:** Node.js 20.19+ or 22.12+ (required by Vite 7) and npm.
 
 ### 1. Create a GitHub OAuth App
 
@@ -48,7 +51,7 @@ Follow these steps to run Repo Timeline on your own machine.
 cp .env.example .env
 ```
 
-Edit `.env` with your credentials:
+Edit `.env` and replace the placeholders with your OAuth App credentials and a random session secret:
 
 ```
 GITHUB_CLIENT_ID=your_client_id
@@ -56,9 +59,11 @@ GITHUB_CLIENT_SECRET=your_client_secret
 SESSION_SECRET=any-random-string
 ```
 
+You can generate a session secret with `openssl rand -hex 32`.
+
 ### 3. Configure AI summaries (optional)
 
-The app works without AI -- you just won't see generated summaries. To enable them, pick a provider and add the corresponding API key:
+The app works without AI -- you just won't see generated summaries. The AI lines in `.env` are commented out by default. To enable summaries, uncomment them (or add your own), pick a provider and set the corresponding API key:
 
 | Provider | `AI_PROVIDER` | API key env var | Default model |
 |----------|---------------|-----------------|---------------|
@@ -73,7 +78,7 @@ AI_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 ```
 
-You can also override the model with `AI_MODEL=your-preferred-model`.
+`AI_PROVIDER` defaults to `anthropic` if unset. You can also override the model with `AI_MODEL=your-preferred-model`.
 
 ### 4. Install and run
 
@@ -83,6 +88,13 @@ npm start
 ```
 
 This starts both the Vite dev server (`:5173`) and the Express backend (`:3001`). Open `http://localhost:5173`, sign in with GitHub, and select a repo.
+
+The server log confirms your setup on startup: `✓ GitHub OAuth configured`, and `✓ AI summaries enabled` if you added an AI key.
+
+Notes:
+
+- Both ports must be free. The OAuth redirects are hard-coded to `localhost:5173` and `localhost:3001`, so if Vite falls back to another port, sign-in won't return to the app.
+- Local sessions are kept in memory, so restarting the server signs you out.
 
 ## Deploying to Vercel
 
@@ -101,7 +113,7 @@ To deploy Repo Timeline to production, you can host it on Vercel. The `api/` dir
 
 - **Frontend**: React + TypeScript + Vite
 - **Backend**: Express (local dev) / Vercel Edge Functions (production)
-- **Auth**: GitHub OAuth with JWT sessions
+- **Auth**: GitHub OAuth -- in-memory sessions locally, signed JWT cookies on Vercel
 - **AI**: Anthropic Claude, OpenAI, or Google Gemini (configurable)
 - **Styling**: Custom CSS, IBM Plex Mono, minimal black-and-white aesthetic
 
