@@ -387,7 +387,7 @@
   outline: none;
 }
 
-.ai-toggle:focus-visible .glass-switch {
+.ai-toggle:focus-visible .toggle-switch {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
 }
@@ -1593,12 +1593,12 @@
   }
 }
 
-/* Glass switch — shared by the AI and theme toggles */
-.glass-switch {
-  --switch-w: 44px;
-  --switch-h: 24px;
-  --thumb: 18px;
-  --inset: 2px;
+/* Flat switch — shared by the AI and theme toggles */
+.toggle-switch {
+  --switch-w: 40px;
+  --switch-h: 22px;
+  --thumb: 16px;
+  --inset: 3px;
   position: relative;
   flex-shrink: 0;
   display: inline-block;
@@ -1606,29 +1606,18 @@
   height: var(--switch-h);
   padding: 0;
   border-radius: 999px;
-  /* Faint tint so the frosted track still reads over a plain background */
-  background: color-mix(in srgb, var(--fg) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent),
-    inset 0 -1px 2px color-mix(in srgb, var(--fg) 6%, transparent),
-    0 2px 10px color-mix(in srgb, #000 8%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
+  background: var(--border);
   cursor: pointer;
-  transition:
-    background-color 250ms var(--ease-out-expo),
-    border-color 250ms var(--ease-out-expo);
+  transition: background-color 200ms ease;
 }
 
-.glass-switch.on {
-  background: color-mix(in srgb, var(--fg) 82%, transparent);
-  border-color: color-mix(in srgb, var(--fg) 30%, transparent);
+.toggle-switch.on {
+  background: var(--fg);
 }
 
-.glass-switch-thumb {
+.toggle-switch-thumb {
   position: absolute;
-  top: calc((var(--switch-h) - 2px - var(--thumb)) / 2);
+  top: var(--inset);
   left: var(--inset);
   width: var(--thumb);
   height: var(--thumb);
@@ -1636,49 +1625,23 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  background: var(--fg-muted);
+  color: var(--bg);
+  transition:
+    transform 250ms var(--ease-out-expo),
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.toggle-switch.on .toggle-switch-thumb {
+  transform: translateX(calc(var(--switch-w) - var(--thumb) - var(--inset) * 2));
   background: var(--bg);
   color: var(--fg);
-  box-shadow:
-    0 1px 3px color-mix(in srgb, #000 22%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 60%, transparent);
-  transition: transform 350ms var(--ease-out-expo);
 }
 
-.glass-switch.on .glass-switch-thumb {
-  transform: translateX(calc(var(--switch-w) - 2px - var(--thumb) - var(--inset) * 2));
-}
-
-.glass-switch:active .glass-switch-thumb,
-.ai-toggle:active .glass-switch-thumb {
-  width: calc(var(--thumb) + 4px);
-  border-radius: 999px;
-}
-
-.glass-switch.on:active .glass-switch-thumb,
-.ai-toggle:active .glass-switch.on .glass-switch-thumb {
-  transform: translateX(calc(var(--switch-w) - 2px - var(--thumb) - var(--inset) * 2 - 4px));
-}
-
-.glass-switch:focus-visible {
+.toggle-switch:focus-visible {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
-}
-
-:root[data-theme="dark"] .glass-switch {
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
-    0 2px 10px color-mix(in srgb, #000 40%, transparent);
-}
-
-:root[data-theme="dark"] .glass-switch.on {
-  background: color-mix(in srgb, var(--fg) 22%, transparent);
-  border-color: color-mix(in srgb, var(--fg) 25%, transparent);
-}
-
-/* Keep the thumb light in dark mode so it reads against the tinted track */
-:root[data-theme="dark"] .glass-switch-thumb {
-  background: var(--fg);
-  color: var(--bg);
 }
 
 /* Theme switch — icon rides in the thumb */

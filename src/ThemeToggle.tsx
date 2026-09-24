@@ -10,16 +10,16 @@ export function ThemeToggle({ floating = false }: { floating?: boolean }) {
       type="button"
       role="switch"
       aria-checked={isDark}
-      className={`glass-switch theme-switch${isDark ? ' on' : ''}${floating ? ' floating' : ''}`}
+      className={`toggle-switch theme-switch${isDark ? ' on' : ''}${floating ? ' floating' : ''}`}
       onClick={toggle}
       aria-label="Dark theme"
       title={nextLabel}
     >
-      <span className="glass-switch-thumb">
+      <span className="toggle-switch-thumb">
         <svg
           className={`theme-icon${isDark ? '' : ' is-visible'}`}
-          width="12"
-          height="12"
+          width="10"
+          height="10"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -40,8 +40,8 @@ export function ThemeToggle({ floating = false }: { floating?: boolean }) {
         </svg>
         <svg
           className={`theme-icon${isDark ? ' is-visible' : ''}`}
-          width="12"
-          height="12"
+          width="10"
+          height="10"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

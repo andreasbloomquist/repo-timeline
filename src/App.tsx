@@ -326,8 +326,8 @@ function Header({
             onClick={onToggleAI}
           >
             <span className="toggle-label">AI Summary</span>
-            <span className={`glass-switch${aiEnabled ? ' on' : ''}`} aria-hidden="true">
-              <span className="glass-switch-thumb" />
+            <span className={`toggle-switch${aiEnabled ? ' on' : ''}`} aria-hidden="true">
+              <span className="toggle-switch-thumb" />
             </span>
           </button>
         )}
