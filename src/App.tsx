@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react'
 import ReactMarkdown from 'react-markdown'
 import './App.css'
 import { ThemeToggle } from './ThemeToggle'
+import { DateRangePicker } from './DateRangePicker'
+import { ALL_TIME, rangeToQuery, type DateRange } from './dateRange'
 
 // Use relative URLs - works in both dev (with proxy) and production
 const API_URL = ''
@@ -129,9 +131,9 @@ async function fetchBranches(owner: string, repo: string): Promise<string[]> {
   }
 }
 
-async function fetchTimeline(owner: string, repo: string, branch: string, minLines: number = 100): Promise<TimelineEvent[]> {
+async function fetchTimeline(owner: string, repo: string, branch: string, minLines: number = 100, range: DateRange = ALL_TIME): Promise<TimelineEvent[]> {
   try {
-    const res = await fetch(`${API_URL}/api/repos/${owner}/${repo}/timeline?branch=${encodeURIComponent(branch)}&minLines=${minLines}`, { credentials: 'include' })
+    const res = await fetch(`${API_URL}/api/repos/${owner}/${repo}/timeline?branch=${encodeURIComponent(branch)}&minLines=${minLines}${rangeToQuery(range)}`, { credentials: 'include' })
     if (!res.ok) return []
     return await res.json()
   } catch {
@@ -248,10 +250,12 @@ function Header({
   branches,
   aiEnabled,
   minLines,
+  dateRange,
   onRepoChange,
   onBranchChange,
   onToggleAI,
   onMinLinesChange,
+  onDateRangeChange,
   onLogout
 }: {
   user: User | null
@@ -261,10 +265,12 @@ function Header({
   branches: string[]
   aiEnabled: boolean
   minLines: number
+  dateRange: DateRange
   onRepoChange: (repo: Repo) => void
   onBranchChange: (branch: string) => void
   onToggleAI: () => void
   onMinLinesChange: (value: number) => void
+  onDateRangeChange: (range: DateRange) => void
   onLogout: () => void
 }) {
   const handleLogin = () => {
@@ -275,18 +281,11 @@ function Header({
     <header className="header">
       <div className="header-left">
         <span className="logo">Timeline</span>
-        {user && (
-          <div className="ai-toggle" onClick={onToggleAI}>
-            <div className={`toggle-track ${aiEnabled ? 'on' : 'off'}`}>
-              <div className="toggle-thumb" />
-            </div>
-            <span className="toggle-label">AI Summary</span>
-          </div>
-        )}
         {user && selectedRepo && (
           <div className="selectors">
-            <div className="selector">
+            <div className="selector selector-repo">
               <select
+                aria-label="Repository"
                 value={selectedRepo.id}
                 onChange={(e) => {
                   const repo = repos.find(r => r.id === Number(e.target.value))
@@ -301,8 +300,9 @@ function Header({
               </select>
               <ChevronIcon />
             </div>
-            <div className="selector">
+            <div className="selector selector-branch">
               <select
+                aria-label="Branch"
                 value={selectedBranch}
                 onChange={(e) => onBranchChange(e.target.value)}
               >
@@ -312,10 +312,26 @@ function Header({
               </select>
               <ChevronIcon />
             </div>
+            <DateRangePicker value={dateRange} onChange={onDateRangeChange} />
           </div>
         )}
       </div>
       <div className="header-right">
+        {user && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={aiEnabled}
+            className="ai-toggle"
+            onClick={onToggleAI}
+          >
+            <span className="toggle-label">AI Summary</span>
+            <span className={`glass-switch${aiEnabled ? ' on' : ''}`} aria-hidden="true">
+              <span className="glass-switch-thumb" />
+            </span>
+          </button>
+        )}
+        <ThemeToggle />
         {user ? (
           <UserMenu user={user} minLines={minLines} onMinLinesChange={onMinLinesChange} onLogout={onLogout} />
         ) : (
@@ -804,6 +820,7 @@ function App() {
   const [loadingTimeline, setLoadingTimeline] = useState(false)
   const [aiEnabled, setAiEnabled] = useState(true)
   const [minLines, setMinLines] = useState(100)
+  const [dateRange, setDateRange] = useState<DateRange>(ALL_TIME)
 
   // Check auth status on mount and after OAuth callback
   useEffect(() => {
@@ -849,22 +866,26 @@ function App() {
     loadBranches()
   }, [selectedRepo])
 
-  // Fetch timeline when branch or threshold changes
+  // Fetch timeline when branch, threshold or date range changes
   useEffect(() => {
     if (!selectedRepo || !selectedBranch) {
       setEvents([])
       return
     }
 
+    // Ignore responses from superseded requests so a slow one can't overwrite a newer one
+    let stale = false
     const loadTimeline = async () => {
       setLoadingTimeline(true)
       const [owner, repo] = selectedRepo.fullName.split('/')
-      const timelineData = await fetchTimeline(owner, repo, selectedBranch, minLines)
+      const timelineData = await fetchTimeline(owner, repo, selectedBranch, minLines, dateRange)
+      if (stale) return
       setEvents(timelineData)
       setLoadingTimeline(false)
     }
     loadTimeline()
-  }, [selectedRepo, selectedBranch, minLines])
+    return () => { stale = true }
+  }, [selectedRepo, selectedBranch, minLines, dateRange])
 
   const handleLogout = async () => {
     await logout()
@@ -883,7 +904,6 @@ function App() {
   if (loading) {
     return (
       <div className="app">
-        <ThemeToggle />
         <Header
           user={null}
           repos={[]}
@@ -892,10 +912,12 @@ function App() {
           branches={[]}
           aiEnabled={aiEnabled}
           minLines={minLines}
+          dateRange={dateRange}
           onRepoChange={() => {}}
           onBranchChange={() => {}}
           onToggleAI={() => {}}
           onMinLinesChange={() => {}}
+          onDateRangeChange={() => {}}
           onLogout={() => {}}
         />
         <main className="main">
@@ -909,7 +931,7 @@ function App() {
 
   return (
     <div className="app">
-      <ThemeToggle />
+      {!user && <ThemeToggle floating />}
       {user && (
         <Header
           user={user}
@@ -919,10 +941,12 @@ function App() {
           branches={branches}
           aiEnabled={aiEnabled}
           minLines={minLines}
+          dateRange={dateRange}
           onRepoChange={handleRepoChange}
           onBranchChange={setSelectedBranch}
           onToggleAI={() => setAiEnabled(!aiEnabled)}
           onMinLinesChange={setMinLines}
+          onDateRangeChange={setDateRange}
           onLogout={handleLogout}
         />
       )}

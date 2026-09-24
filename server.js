@@ -159,20 +159,20 @@ app.get('/api/repos/:owner/:repo/branches', async (req, res) => {
 });
 
 // Get timeline events (major commits and merged PRs)
-app.get('/api/repos/:owner/:repo/timeline', async (req, res) => {
-  if (!req.session.accessToken) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
+// Max parallel GitHub API requests per timeline load. Kept modest to stay
+// clear of GitHub's secondary rate limits.
+const GITHUB_CONCURRENCY = 8;
 
-  const { owner, repo } = req.params;
-  const { branch, minLines } = req.query;
-  const threshold = parseInt(minLines) || 100;
+// Most recently merged PRs into `branch`, up to MAX_PRS. The PR list API has no
+// date filter, so with a date range we page back (newest updated first) until
+// PRs were last updated before the range starts — a PR is always updated at or
+// after it merges, so nothing older can have merged inside the range.
+const MAX_PRS = 50;
+const MAX_PR_PAGES = 5;
 
-  try {
-    const octokit = new Octokit({ auth: req.session.accessToken });
-    const events = [];
-
-    // Fetch merged PRs
+async function listMergedPrs(octokit, { owner, repo, branch, sinceTime, untilTime, inRange }) {
+  const merged = [];
+  for (let page = 1; page <= MAX_PR_PAGES && merged.length < MAX_PRS; page++) {
     const { data: prs } = await octokit.pulls.list({
       owner,
       repo,
@@ -180,36 +180,83 @@ app.get('/api/repos/:owner/:repo/timeline', async (req, res) => {
       sort: 'updated',
       direction: 'desc',
       per_page: 50,
-      base: branch
+      base: branch,
+      page
     });
+    merged.push(...prs.filter(p => p.merged_at && inRange(p.merged_at)));
+
+    const oldest = prs[prs.length - 1];
+    const pastRange = sinceTime !== null && oldest && new Date(oldest.updated_at).getTime() < sinceTime;
+    // Without a date range, one page is the whole window
+    if (prs.length < 50 || pastRange || (sinceTime === null && untilTime === null)) break;
+  }
+  return merged.slice(0, MAX_PRS);
+}
+
+// Run fn over items with at most `limit` calls in flight at once
+async function mapWithConcurrency(items, limit, fn) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      await fn(items[next++]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+app.get('/api/repos/:owner/:repo/timeline', async (req, res) => {
+  if (!req.session.accessToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  const { owner, repo } = req.params;
+  const { branch, minLines, since, until } = req.query;
+  const threshold = parseInt(minLines) || 100;
+  // Optional ISO date range; either end may be omitted
+  const sinceTime = since ? new Date(since).getTime() : null;
+  const untilTime = until ? new Date(until).getTime() : null;
+  if (Number.isNaN(sinceTime) || Number.isNaN(untilTime)) {
+    return res.status(400).json({ error: 'Invalid date range' });
+  }
+  const inRange = (date) => {
+    const t = new Date(date).getTime();
+    return (sinceTime === null || t >= sinceTime) && (untilTime === null || t <= untilTime);
+  };
+
+  try {
+    const octokit = new Octokit({ auth: req.session.accessToken });
+    const events = [];
+
+    // Fetch the PR list and commit list in parallel
+    const [mergedPrs, { data: commits }] = await Promise.all([
+      listMergedPrs(octokit, { owner, repo, branch, sinceTime, untilTime, inRange }),
+      octokit.repos.listCommits({
+        owner,
+        repo,
+        sha: branch,
+        per_page: 100,
+        ...(since && { since }),
+        ...(until && { until })
+      })
+    ]);
 
     // Get all merged PRs (any line count)
     const prCommitShas = new Set();
-    for (const pr of prs.filter(p => p.merged_at)) {
+    await mapWithConcurrency(mergedPrs, GITHUB_CONCURRENCY, async (pr) => {
       try {
-        const { data: prDetail } = await octokit.pulls.get({
-          owner,
-          repo,
-          pull_number: pr.number
-        });
+        const [{ data: prDetail }, prCommits] = await Promise.all([
+          octokit.pulls.get({ owner, repo, pull_number: pr.number }),
+          // Get PR commits to exclude them from direct commits
+          octokit.pulls.listCommits({ owner, repo, pull_number: pr.number, per_page: 100 })
+            .then(r => r.data)
+            .catch(() => []) // Continue without PR commits list
+        ]);
 
         // Track merge commit SHA to exclude from direct commits
         if (prDetail.merge_commit_sha) {
           prCommitShas.add(prDetail.merge_commit_sha);
         }
-
-        // Get PR commits to exclude them from direct commits
-        try {
-          const { data: prCommits } = await octokit.pulls.listCommits({
-            owner,
-            repo,
-            pull_number: pr.number,
-            per_page: 100
-          });
-          prCommits.forEach(c => prCommitShas.add(c.sha));
-        } catch (e) {
-          // Continue without PR commits list
-        }
+        prCommits.forEach(c => prCommitShas.add(c.sha));
 
         // Only include PRs that meet the line threshold
         const prTotalChanges = (prDetail.additions || 0) + (prDetail.deletions || 0);
@@ -233,28 +280,15 @@ app.get('/api/repos/:owner/:repo/timeline', async (req, res) => {
       } catch (e) {
         // Skip PRs we can't fetch details for
       }
-    }
-
-    // Fetch commits
-    const { data: commits } = await octokit.repos.listCommits({
-      owner,
-      repo,
-      sha: branch,
-      per_page: 100
     });
 
-    // Get direct commits (not part of any PR) with >100 line changes
-    for (const commit of commits.slice(0, 50)) { // Limit to avoid rate limits
-      // Skip if this commit is part of a PR
-      if (prCommitShas.has(commit.sha)) {
-        continue;
-      }
+    // Get direct commits (not part of any PR) with >100 line changes.
+    // Skip commits that are part of a PR, and merge commits (multiple parents).
+    const directCommits = commits
+      .slice(0, 50) // Limit to avoid rate limits
+      .filter(commit => !prCommitShas.has(commit.sha) && !(commit.parents && commit.parents.length > 1));
 
-      // Skip merge commits (they have multiple parents)
-      if (commit.parents && commit.parents.length > 1) {
-        continue;
-      }
-
+    await mapWithConcurrency(directCommits, GITHUB_CONCURRENCY, async (commit) => {
       try {
         const { data: commitDetail } = await octokit.repos.getCommit({
           owner,
@@ -285,7 +319,7 @@ app.get('/api/repos/:owner/:repo/timeline', async (req, res) => {
       } catch (e) {
         // Skip commits we can't fetch details for
       }
-    }
+    });
 
     // Sort by date descending
     events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

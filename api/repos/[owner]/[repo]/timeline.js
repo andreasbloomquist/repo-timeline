@@ -42,6 +42,21 @@ export default async function handler(request) {
   const repo = pathParts[repoIndex + 2];
   const branch = url.searchParams.get('branch') || 'main';
   const threshold = parseInt(url.searchParams.get('minLines')) || 100;
+  // Optional ISO date range; either end may be omitted
+  const since = url.searchParams.get('since');
+  const until = url.searchParams.get('until');
+  const sinceTime = since ? new Date(since).getTime() : null;
+  const untilTime = until ? new Date(until).getTime() : null;
+  if (Number.isNaN(sinceTime) || Number.isNaN(untilTime)) {
+    return new Response(JSON.stringify({ error: 'Invalid date range' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  const inRange = (date) => {
+    const t = new Date(date).getTime();
+    return (sinceTime === null || t >= sinceTime) && (untilTime === null || t <= untilTime);
+  };
 
   const headers = {
     'Authorization': `Bearer ${payload.accessToken}`,
@@ -61,7 +76,7 @@ export default async function handler(request) {
     const prs = await prsResponse.json();
 
     // Process ALL merged PRs (any line count)
-    for (const pr of (prs || []).filter(p => p.merged_at).slice(0, 20)) {
+    for (const pr of (prs || []).filter(p => p.merged_at && inRange(p.merged_at)).slice(0, 20)) {
       try {
         const prDetailResponse = await fetch(
           `https://api.github.com/repos/${owner}/${repo}/pulls/${pr.number}`,
@@ -112,7 +127,9 @@ export default async function handler(request) {
 
     // Fetch commits
     const commitsResponse = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/commits?sha=${branch}&per_page=50`,
+      `https://api.github.com/repos/${owner}/${repo}/commits?sha=${branch}&per_page=50`
+        + (since ? `&since=${encodeURIComponent(since)}` : '')
+        + (until ? `&until=${encodeURIComponent(until)}` : ''),
       { headers }
     );
     const commits = await commitsResponse.json();
