@@ -1,6 +1,12 @@
 import { SignJWT, jwtVerify } from 'jose';
 
-const SECRET = new TextEncoder().encode(process.env.SESSION_SECRET || 'timeline-secret-change-me');
+// No fallback: a known default would let anyone forge session tokens, and a random
+// one would differ between serverless instances and break sign-in
+if (!process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET is not set. Add it to your environment variables.');
+}
+
+const SECRET = new TextEncoder().encode(process.env.SESSION_SECRET);
 
 export async function createToken(payload) {
   return await new SignJWT(payload)

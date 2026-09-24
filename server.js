@@ -3,6 +3,7 @@ import cors from 'cors';
 import session from 'express-session';
 import { Octokit } from '@octokit/rest';
 import dotenv from 'dotenv';
+import { randomBytes } from 'node:crypto';
 
 dotenv.config();
 
@@ -15,8 +16,11 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+// Sessions live in memory, so a random per-run secret is safe when none is set
+const SESSION_SECRET = process.env.SESSION_SECRET || randomBytes(32).toString('hex');
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'timeline-secret-key-change-in-production',
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -491,6 +495,9 @@ app.listen(PORT, () => {
     console.log('');
   } else {
     console.log('✓ GitHub OAuth configured');
+  }
+  if (!process.env.SESSION_SECRET) {
+    console.log('⚠️  SESSION_SECRET not set — using a random one for this run');
   }
   const { provider, model, apiKey } = getAIConfig();
   if (apiKey) {
